@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 /*
  * Copyright (C) 2018-2019 Intel Corporation
  *
@@ -60,7 +61,6 @@ async function initLogger(jobID) {
     Logger.setTimeThreshold(Logger.EventType.zoomImage);
 }
 
-
 function blurAllElements() {
     document.activeElement.blur();
 }
@@ -68,7 +68,10 @@ function blurAllElements() {
 function uploadAnnotation(jobId, shapeCollectionModel, historyModel, annotationSaverModel,
     uploadAnnotationButton, format) {
     $('#annotationFileSelector').attr('accept',
-        format.ext.split(',').map(x => '.' + x.trimStart()).join(', '));
+        format.ext
+            .split(',')
+            .map(x => `.${x.trimStart()}`)
+            .join(', '));
     $('#annotationFileSelector').one('change', async (changedFileEvent) => {
         const file = changedFileEvent.target.files['0'];
         changedFileEvent.target.value = '';
@@ -91,7 +94,6 @@ function uploadAnnotation(jobId, shapeCollectionModel, historyModel, annotationS
         }
     }).click();
 }
-
 
 function setupFrameFilters() {
     const brightnessRange = $('#playerBrightnessRange');
@@ -176,7 +178,6 @@ function setupFrameFilters() {
     });
 }
 
-
 function setupShortkeys(shortkeys, models) {
     const annotationMenu = $('#annotationMenu');
     const settingsWindow = $('#settingsWindow');
@@ -239,7 +240,6 @@ function setupShortkeys(shortkeys, models) {
     Mousetrap.bind(shortkeys.cancel_mode.value, cancelModeHandler, 'keydown');
 }
 
-
 function setupHelpWindow(shortkeys) {
     const closeHelpButton = $('#closeHelpButton');
     const helpTable = $('#shortkeyHelpTable');
@@ -255,7 +255,6 @@ function setupHelpWindow(shortkeys) {
     }
 }
 
-
 function setupSettingsWindow() {
     const closeSettingsButton = $('#closeSettignsButton');
 
@@ -263,7 +262,6 @@ function setupSettingsWindow() {
         $('#settingsWindow').addClass('hidden');
     });
 }
-
 
 function setupMenu(job, task, shapeCollectionModel,
     annotationParser, aamModel, playerModel, historyModel,
@@ -391,7 +389,7 @@ function setupMenu(job, task, shapeCollectionModel,
 
     $('#openTaskButton').on('click', () => {
         const win = window.open(
-            `${window.UI_URL}/tasks/${window.cvat.job.task_id}`, '_blank'
+            `${window.UI_URL}/tasks/${window.cvat.job.task_id}`, '_blank',
         );
         win.focus();
     });
@@ -485,7 +483,6 @@ function setupMenu(job, task, shapeCollectionModel,
     $('#switchAAMButton').attr('title', `
         ${shortkeys.switch_aam_mode.view_value} - ${shortkeys.switch_aam_mode.description}`);
 }
-
 
 function buildAnnotationUI(
     jobData, taskData, imageMetaData,
@@ -621,7 +618,6 @@ function buildAnnotationUI(
         }));
     new PlayerView(playerModel, playerController);
 
-
     const aamModel = new AAMModel(shapeCollectionModel, (xtl, xbr, ytl, ybr) => {
         playerModel.focus(xtl, xbr, ytl, ybr);
     }, () => {
@@ -695,7 +691,6 @@ function buildAnnotationUI(
     });
 }
 
-
 function callAnnotationUI(jid) {
     function onError(errorData) {
         $('body').empty();
@@ -725,7 +720,6 @@ function callAnnotationUI(jid) {
     }).fail(onError);
 }
 
-
 function copyToClipboard(text) {
     const tempInput = $('<input>');
     $('body').append(tempInput);
@@ -733,7 +727,6 @@ function copyToClipboard(text) {
     document.execCommand('copy');
     tempInput.remove();
 }
-
 
 function drawBoxSize(boxScene, textScene, box) {
     const clientBox = window.cvat.translate.box.canvasToClient(boxScene.node, box);

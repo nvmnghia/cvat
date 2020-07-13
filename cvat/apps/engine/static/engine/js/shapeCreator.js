@@ -1,3 +1,5 @@
+/* eslint-disable eqeqeq */
+/* eslint-disable no-plusplus */
 /*
  * Copyright (C) 2018 Intel Corporation
  *
@@ -69,13 +71,22 @@ class ShapeCreatorModel extends Listener {
         const model = this._shapeCollection.shapes.slice(-1)[0];
 
         // Undo/redo code
-        window.cvat.addAction('Draw Object', () => {
-            model.removed = true;
-            model.unsubscribe(this._shapeCollection);
-        }, () => {
-            model.subscribe(this._shapeCollection);
-            model.removed = false;
-        }, window.cvat.player.frames.current);
+        window.cvat.addAction(
+            // name
+            'Draw Object',
+            // undo
+            () => {
+                model.removed = true;
+                model.unsubscribe(this._shapeCollection);
+            },
+            // redo
+            () => {
+                model.subscribe(this._shapeCollection);
+                model.removed = false;
+            },
+            // frame
+            window.cvat.player.frames.current,
+        );
         // End of undo/redo code
 
         this._shapeCollection.update();
@@ -128,7 +139,7 @@ class ShapeCreatorModel extends Listener {
     }
 
     set defaultType(type) {
-        if (!['box', 'box_by_4_points', 'points', 'polygon', 'polyline', "cuboid"].includes(type)) {
+        if (!['box', 'box_by_4_points', 'points', 'polygon', 'polyline', 'cuboid'].includes(type)) {
             throw Error(`Unknown shape type found ${type}`);
         }
         this._defaultType = type;
@@ -147,19 +158,18 @@ class ShapeCreatorModel extends Listener {
     }
 }
 
-
 class ShapeCreatorController {
     constructor(drawerModel) {
         this._model = drawerModel;
         setupShortkeys.call(this);
         function setupShortkeys() {
-            let shortkeys = window.cvat.config.shortkeys;
+            const { shortkeys } = window.cvat.config;
 
-            let switchDrawHandler = Logger.shortkeyLogDecorator(function() {
+            const switchDrawHandler = Logger.shortkeyLogDecorator(() => {
                 this.switchCreateMode(false, true);
-            }.bind(this));
+            });
 
-            Mousetrap.bind(shortkeys["switch_draw_mode"].value, switchDrawHandler.bind(this), 'keydown');
+            Mousetrap.bind(shortkeys.switch_draw_mode.value, switchDrawHandler.bind(this), 'keydown');
         }
     }
 
@@ -206,7 +216,7 @@ class ShapeCreatorView {
         this._aim = null;
         this._aimCoord = {
             x: 0,
-            y: 0
+            y: 0,
         };
         this._polyShapeSize = 0;
         this._type = null;
@@ -215,12 +225,12 @@ class ShapeCreatorView {
         this._scale = 1;
         this._borderSticker = null;
 
-        let shortkeys = window.cvat.config.shortkeys;
+        const { shortkeys } = window.cvat.config;
         this._createButton.attr('title', `
-            ${shortkeys['switch_draw_mode'].view_value} - ${shortkeys['switch_draw_mode'].description}`);
+            ${shortkeys.switch_draw_mode.view_value} - ${shortkeys.switch_draw_mode.description}`);
 
         this._labelSelector.attr('title', `
-            ${shortkeys['change_default_label'].view_value} - ${shortkeys['change_default_label'].description}`);
+            ${shortkeys.change_default_label.view_value} - ${shortkeys.change_default_label.description}`);
 
         const labels = window.cvat.labelsInfo.labels();
         const labelsKeys = Object.keys(labels);
@@ -279,13 +289,16 @@ class ShapeCreatorView {
             this._polyShapeSize = size;
         }).trigger('change');
 
-        this._polyShapeSizeInput.on('keydown', function(e) {
+        this._polyShapeSizeInput.on('keydown', (e) => {
             e.stopPropagation();
         });
 
         this._playerFrame.on('mousemove.shapeCreatorAIM', (e) => {
             if (!['polygon', 'polyline', 'points'].includes(this._type)) {
-                this._aimCoord = window.cvat.translate.point.clientToCanvas(this._frameContent.node, e.clientX, e.clientY);
+                this._aimCoord = window.cvat.translate.point.clientToCanvas(
+                    this._frameContent.node, e.clientX, e.clientY,
+                );
+
                 if (this._aim) {
                     this._aim.x.attr({
                         y1: this._aimCoord.y,
@@ -318,10 +331,10 @@ class ShapeCreatorView {
     _createCuboidEvent() {
         let sizeUI = null;
         const backFaceOffset = 20;
-        this._drawInstance = this._frameContent.rect().draw({ snapToGrid: 0.1 }).addClass("shapeCreation").attr({
-            "stroke-width": STROKE_WIDTH / this._scale,
+        this._drawInstance = this._frameContent.rect().draw({ snapToGrid: 0.1 }).addClass('shapeCreation').attr({
+            'stroke-width': STROKE_WIDTH / this._scale,
         })
-            .on("drawstop", (e) => {
+            .on('drawstop', (e) => {
                 if (this._cancel) {
                     return;
                 }
@@ -351,16 +364,16 @@ class ShapeCreatorView {
                 points = viewModel.getPoints();
 
                 points = PolyShapeModel.convertNumberArrayToString(points);
-                e.target.setAttribute("points",
+                e.target.setAttribute('points',
                     window.cvat.translate.points.actualToCanvas(points));
                 this._controller.finish({ points }, this._type);
                 this._controller.switchCreateMode(true);
             })
-            .on("drawupdate", (e) => {
+            .on('drawupdate', (e) => {
                 sizeUI = drawBoxSize.call(sizeUI, this._frameContent,
                     this._frameText, e.target.getBBox());
             })
-            .on("drawcancel", () => {
+            .on('drawcancel', () => {
                 if (sizeUI) {
                     sizeUI.rm();
                     sizeUI = null;
@@ -370,7 +383,7 @@ class ShapeCreatorView {
 
     _createPolyEvents() {
         // If number of points for poly shape specified, use it.
-        // Dicrement number on draw new point events. Drawstart trigger when create first point
+        // Decrement number on draw new point events. Drawstart trigger when create first point
         let lastPoint = {
             x: null,
             y: null,
@@ -416,7 +429,7 @@ class ShapeCreatorView {
                 x: e.detail.event.clientX,
                 y: e.detail.event.clientY,
             };
-            numberOfPoints ++;
+            numberOfPoints++;
         });
 
         this._drawInstance.on('drawpoint', (e) => {
@@ -425,8 +438,8 @@ class ShapeCreatorView {
                 y: e.detail.event.clientY,
             };
             numberOfPoints += 1;
-            if (this._type === "cuboid" && numberOfPoints === 4) {
-                this._drawInstance.draw("done");
+            if (this._type === 'cuboid' && numberOfPoints === 4) {
+                this._drawInstance.draw('done');
             }
         });
 
@@ -441,14 +454,14 @@ class ShapeCreatorView {
 
         this._frameContent.on('mousedown.shapeCreator', (e) => {
             if (e.which === 3) {
-                let lenBefore = this._drawInstance.array().value.length;
+                const lenBefore = this._drawInstance.array().value.length;
                 this._drawInstance.draw('undo');
                 if (this._borderSticker) {
                     this._borderSticker.reset();
                 }
-                let lenAfter = this._drawInstance.array().value.length;
+                const lenAfter = this._drawInstance.array().value.length;
                 if (lenBefore != lenAfter) {
-                    numberOfPoints --;
+                    numberOfPoints--;
                 }
             }
         });
@@ -457,10 +470,12 @@ class ShapeCreatorView {
             if (e.shiftKey && ['polygon', 'polyline'].includes(this._type)) {
                 if (lastPoint.x === null || lastPoint.y === null) {
                     this._drawInstance.draw('point', e);
-                }
-                else {
-                    let delta = Math.sqrt(Math.pow(e.clientX - lastPoint.x, 2) + Math.pow(e.clientY - lastPoint.y, 2));
-                    let deltaTreshold = 15;
+                } else {
+                    const delta = Math.sqrt(
+                        Math.pow(e.clientX - lastPoint.x, 2)
+                        + Math.pow(e.clientY - lastPoint.y, 2),
+                    );
+                    const deltaTreshold = 15;
                     if (delta > deltaTreshold) {
                         this._drawInstance.draw('point', e);
                         lastPoint = {
@@ -484,23 +499,22 @@ class ShapeCreatorView {
             }
         });
         // Also we need callback on drawdone event for get points
-        this._drawInstance.on("drawdone", (e) => {
-            let actualPoints = window.cvat.translate.points.canvasToActual(e.target.getAttribute("points"));
+        this._drawInstance.on('drawdone', (e) => {
+            let actualPoints = window.cvat.translate.points.canvasToActual(e.target.getAttribute('points'));
             actualPoints = PolyShapeModel.convertStringToNumberArray(actualPoints);
 
             // Min 2 points for polyline and 3 points for polygon
             if (actualPoints.length) {
                 if (this._type === 'polyline' && actualPoints.length < 2) {
-                    showMessage("Min 2 points must be for polyline drawing.");
-                }
-                else if (this._type === 'polygon' && actualPoints.length < 3) {
-                    showMessage("Min 3 points must be for polygon drawing.");
-                } else if (this._type === "cuboid" && (actualPoints.length !== 4)) {
-                    showMessage("Exactly 4 points must be used for cuboid drawing."
-                        + " Second point must be below the first point."
-                        + "(HINT) The first 3 points define the front face"
-                        + " and the last point should define the depth and orientation of the cuboid ");
-                } else if (this._type === "cuboid") {
+                    showMessage('Min 2 points must be for polyline drawing.');
+                } else if (this._type === 'polygon' && actualPoints.length < 3) {
+                    showMessage('Min 3 points must be for polygon drawing.');
+                } else if (this._type === 'cuboid' && (actualPoints.length !== 4)) {
+                    showMessage('Exactly 4 points must be used for cuboid drawing.'
+                        + ' Second point must be below the first point.'
+                        + '(HINT) The first 3 points define the front face'
+                        + ' and the last point should define the depth and orientation of the cuboid ');
+                } else if (this._type === 'cuboid') {
                     let points = this._makeCuboid(actualPoints);
                     const viewModel = new Cuboid2PointViewModel(points);
                     if (!CuboidModel.isWithinFrame(points)) {
@@ -511,7 +525,7 @@ class ShapeCreatorView {
                     points = viewModel.getPoints();
 
                     points = PolyShapeModel.convertNumberArrayToString(points);
-                    e.target.setAttribute("points",
+                    e.target.setAttribute('points',
                         window.cvat.translate.points.actualToCanvas(points));
                     this._controller.finish({ points }, this._type);
                     this._controller.switchCreateMode(true);
@@ -525,14 +539,14 @@ class ShapeCreatorView {
                     actualPoints = PolyShapeModel.convertNumberArrayToString(actualPoints);
 
                     // Update points in a view in order to get an updated box
-                    e.target.setAttribute("points", window.cvat.translate.points.actualToCanvas(actualPoints));
+                    e.target.setAttribute('points', window.cvat.translate.points.actualToCanvas(actualPoints));
                     const polybox = e.target.getBBox();
                     const w = polybox.width;
                     const h = polybox.height;
                     const area = w * h;
                     const type = this._type;
 
-                    if (area >= AREA_TRESHOLD || type === "points" && numberOfPoints || type === "polyline" && (w >= AREA_TRESHOLD || h >= AREA_TRESHOLD)) {
+                    if (area >= AREA_TRESHOLD || type === 'points' && numberOfPoints || type === 'polyline' && (w >= AREA_TRESHOLD || h >= AREA_TRESHOLD)) {
                         this._controller.finish({ points: actualPoints }, type);
                     }
                 }
@@ -542,8 +556,8 @@ class ShapeCreatorView {
         });
     }
 
-    _sortClockwise(points){
-         points.sort((a, b) => a.y - b.y);
+    _sortClockwise(points) {
+        points.sort((a, b) => a.y - b.y);
         // Get center y
         const cy = (points[0].y + points[points.length - 1].y) / 2;
 
@@ -554,21 +568,19 @@ class ShapeCreatorView {
         const cx = (points[0].x + points[points.length - 1].x) / 2;
 
         // Center point
-        var center = {
-            x : cx,
-            y : cy
+        const center = {
+            x: cx,
+            y: cy,
         };
 
         // Starting angle used to reference other angles
-        var startAng;
+        let startAng;
         points.forEach((point) => {
-            var ang = Math.atan2(point.y - center.y, point.x - center.x);
+            let ang = Math.atan2(point.y - center.y, point.x - center.x);
             if (!startAng) {
                 startAng = ang;
-            } else {
-                if (ang < startAng) { // ensure that all points are clockwise of the start point
-                    ang += Math.PI * 2;
-                }
+            } else if (ang < startAng) { // ensure that all points are clockwise of the start point
+                ang += Math.PI * 2;
             }
             point.angle = ang; // add the angle to the point
         });
@@ -578,104 +590,109 @@ class ShapeCreatorView {
         return points.reverse();
     }
 
-    _makeCuboid(actualPoints){
-        let unsortedPlanePoints = actualPoints.slice(0,3);
-        function rotate( array , times ){
-            while( times-- ){
-                var temp = array.shift();
-                array.push( temp );
+    _makeCuboid(actualPoints) {
+        const unsortedPlanePoints = actualPoints.slice(0, 3);
+        function rotate(array, times) {
+            while (times--) {
+                const temp = array.shift();
+                array.push(temp);
             }
         }
 
         let plane1;
-        let plane2 = {p1:actualPoints[0], p2:actualPoints[0], p3:actualPoints[0], p4:actualPoints[0]};
+        const plane2 = {
+            p1: actualPoints[0], p2: actualPoints[0], p3: actualPoints[0], p4: actualPoints[0],
+        };
 
         // completing the plane
         const vector = {
             x: actualPoints[2].x - actualPoints[1].x,
             y: actualPoints[2].y - actualPoints[1].y,
-        }
-
-        // sorting the first plane
-        unsortedPlanePoints.push({x:actualPoints[0].x + vector.x, y: actualPoints[0].y + vector.y});
-        let sortedPlanePoints = this._sortClockwise(unsortedPlanePoints);
-        let leftIndex = 0;
-        for(let i = 0; i<4; i++){
-            leftIndex = sortedPlanePoints[`${i}`].x < sortedPlanePoints[`${leftIndex}`].x ? i : leftIndex;
-        }
-        rotate(sortedPlanePoints,leftIndex);
-        plane1 = {
-            p1:sortedPlanePoints[0],
-            p2:sortedPlanePoints[1],
-            p3:sortedPlanePoints[2],
-            p4:sortedPlanePoints[3]
         };
 
-       const vec = {
+        // sorting the first plane
+        unsortedPlanePoints.push({
+            x: actualPoints[0].x + vector.x,
+            y: actualPoints[0].y + vector.y,
+        });
+        const sortedPlanePoints = this._sortClockwise(unsortedPlanePoints);
+        let leftIndex = 0;
+        for (let i = 0; i < 4; i++) {
+            leftIndex = sortedPlanePoints[`${i}`].x < sortedPlanePoints[`${leftIndex}`].x ? i : leftIndex;
+        }
+        rotate(sortedPlanePoints, leftIndex);
+        plane1 = {
+            p1: sortedPlanePoints[0],
+            p2: sortedPlanePoints[1],
+            p3: sortedPlanePoints[2],
+            p4: sortedPlanePoints[3],
+        };
+
+        const vec = {
             x: actualPoints[3].x - actualPoints[2].x,
             y: actualPoints[3].y - actualPoints[2].y,
         };
         // determine the orientation
-        let angle = Math.atan2(vec.y,vec.x);
+        const angle = Math.atan2(vec.y, vec.x);
 
         // making the other plane
-        plane2.p1 =  {x:plane1.p1.x + vec.x, y:plane1.p1.y + vec.y};
-        plane2.p2 =  {x:plane1.p2.x + vec.x, y:plane1.p2.y + vec.y};
-        plane2.p3 =  {x:plane1.p3.x + vec.x, y:plane1.p3.y + vec.y};
-        plane2.p4 =  {x:plane1.p4.x + vec.x, y:plane1.p4.y + vec.y};
+        plane2.p1 = { x: plane1.p1.x + vec.x, y: plane1.p1.y + vec.y };
+        plane2.p2 = { x: plane1.p2.x + vec.x, y: plane1.p2.y + vec.y };
+        plane2.p3 = { x: plane1.p3.x + vec.x, y: plane1.p3.y + vec.y };
+        plane2.p4 = { x: plane1.p4.x + vec.x, y: plane1.p4.y + vec.y };
 
-
-        let points ;
+        let points;
         // right
-        if(Math.abs(angle) < Math.PI/2-0.1){
+        if (Math.abs(angle) < Math.PI / 2 - 0.1) {
             return this._setupCuboidPoints(actualPoints);
         }
 
         // left
-        else if(Math.abs(angle) > Math.PI/2+0.1){
+        if (Math.abs(angle) > Math.PI / 2 + 0.1) {
             return this._setupCuboidPoints(actualPoints);
         }
         // down
-        else if(angle>0){
-            points = [plane1.p1,plane2.p1,plane1.p2,plane2.p2,plane1.p3,plane2.p3];
-            points[0].y+=0.1;
-            points[4].y+=0.1;
-            return [plane1.p1,plane2.p1,plane1.p2,plane2.p2,plane1.p3,plane2.p3];
+        if (angle > 0) {
+            points = [plane1.p1, plane2.p1, plane1.p2, plane2.p2, plane1.p3, plane2.p3];
+            points[0].y += 0.1;
+            points[4].y += 0.1;
+            return [plane1.p1, plane2.p1, plane1.p2, plane2.p2, plane1.p3, plane2.p3];
         }
         // up
-        else{
-            points = [plane2.p1,plane1.p1,plane2.p2,plane1.p2,plane2.p3,plane1.p3];
-            points[0].y+=0.1;
-            points[4].y+=0.1;
-            return points;
-        }
+
+        points = [plane2.p1, plane1.p1, plane2.p2, plane1.p2, plane2.p3, plane1.p3];
+        points[0].y += 0.1;
+        points[4].y += 0.1;
+        return points;
     }
 
     _setupCuboidPoints(actualPoints) {
-        let left,right,left2,right2;
-        let p1,p2,p3,p4,p5,p6;
+        let left; let right; let left2; let right2;
+        let p1; let p2; let p3; let p4; let p5; let p6;
 
         const height = Math.abs(actualPoints[0].x - actualPoints[1].x)
             < Math.abs(actualPoints[1].x - actualPoints[2].x)
             ? Math.abs(actualPoints[1].y - actualPoints[0].y)
             : Math.abs(actualPoints[1].y - actualPoints[2].y);
 
-        // seperate into left and right point
+        // separate into left and right point
         // we pick the first and third point because we know assume they will be on
         // opposite corners
-        if(actualPoints[0].x < actualPoints[2].x){
-            left = actualPoints[0];
-            right = actualPoints[2];
-        }else{
-            left = actualPoints[2];
-            right = actualPoints[0];
+        if (actualPoints[0].x < actualPoints[2].x) {
+            // left = actualPoints[0];
+            // right = actualPoints[2];
+            [left, , right] = actualPoints;
+        } else {
+            // left = actualPoints[2];
+            // right = actualPoints[0];
+            [right, , left] = actualPoints;
         }
 
         // get other 2 points using the given height
-        if(left.y < right.y){
+        if (left.y < right.y) {
             left2 = { x: left.x, y: left.y + height };
             right2 = { x: right.x, y: right.y - height };
-        }else{
+        } else {
             left2 = { x: left.x, y: left.y - height };
             right2 = { x: right.x, y: right.y + height };
         }
@@ -686,85 +703,95 @@ class ShapeCreatorView {
             y: actualPoints[3].y - actualPoints[2].y,
         };
 
-        if(left.y < left2.y){
+        if (left.y < left2.y) {
             p1 = left;
             p2 = left2;
-        }else{
+        } else {
             p1 = left2;
             p2 = left;
         }
 
-        if(right.y < right2.y){
+        if (right.y < right2.y) {
             p3 = right;
             p4 = right2;
-        }else{
+        } else {
             p3 = right2;
             p4 = right;
         }
 
-         p5 = { x: p3.x + vec.x, y: p3.y + vec.y + 0.1 };
-         p6 = { x: p4.x + vec.x, y: p4.y + vec.y - 0.1 };
+        p5 = { x: p3.x + vec.x, y: p3.y + vec.y + 0.1 };
+        p6 = { x: p4.x + vec.x, y: p4.y + vec.y - 0.1 };
 
         p1.y += 0.1;
-        return  [p1, p2, p3, p4, p5, p6];
+        return [p1, p2, p3, p4, p5, p6];
     }
 
     _create() {
         let sizeUI = null;
-        switch(this._type) {
+        switch (this._type) {
         case 'box':
-            this._drawInstance = this._frameContent.rect().draw({ snapToGrid: 0.1 }).addClass('shapeCreation').attr({
-                'stroke-width': STROKE_WIDTH / this._scale,
-                z_order: Number.MAX_SAFE_INTEGER,
-            }).on('drawstop', function(e) {
-                if (this._cancel) return;
-                if (sizeUI) {
-                    sizeUI.rm();
-                    sizeUI = null;
-                }
-
-                const frameWidth = window.cvat.player.geometry.frameWidth;
-                const frameHeight = window.cvat.player.geometry.frameHeight;
-                const rect = window.cvat.translate.box.canvasToActual(e.target.getBBox());
-
-                const xtl = Math.clamp(rect.x, 0, frameWidth);
-                const ytl = Math.clamp(rect.y, 0, frameHeight);
-                const xbr = Math.clamp(rect.x + rect.width, 0, frameWidth);
-                const ybr = Math.clamp(rect.y + rect.height, 0, frameHeight);
-                if ((ybr - ytl) * (xbr - xtl) >= AREA_TRESHOLD) {
-                    const box = {
-                        xtl,
-                        ytl,
-                        xbr,
-                        ybr,
-                    };
-
-                    if (this._mode === 'interpolation') {
-                        box.outside = false;
+            this._drawInstance = this._frameContent.rect()
+                .draw({ snapToGrid: 0.1 })
+                .addClass('shapeCreation')
+                .attr({
+                    'stroke-width': STROKE_WIDTH / this._scale,
+                    z_order: Number.MAX_SAFE_INTEGER,
+                })
+                .on('drawstop', (e) => {
+                    if (this._cancel) return;
+                    if (sizeUI) {
+                        sizeUI.rm();
+                        sizeUI = null;
                     }
 
-                    this._controller.finish(box, this._type);
-                }
+                    const { frameWidth } = window.cvat.player.geometry;
+                    const { frameHeight } = window.cvat.player.geometry;
+                    const rect = window.cvat.translate.box.canvasToActual(e.target.getBBox());
 
-                this._controller.switchCreateMode(true);
-            }.bind(this)).on('drawupdate', (e) => {
-                sizeUI = drawBoxSize.call(sizeUI, this._frameContent, this._frameText, e.target.getBBox());
-            }).on('drawcancel', () => {
-                if (sizeUI) {
-                    sizeUI.rm();
-                    sizeUI = null;
-                }
-            });
+                    const xtl = Math.clamp(rect.x, 0, frameWidth);
+                    const ytl = Math.clamp(rect.y, 0, frameHeight);
+                    const xbr = Math.clamp(rect.x + rect.width, 0, frameWidth);
+                    const ybr = Math.clamp(rect.y + rect.height, 0, frameHeight);
+
+                    if ((ybr - ytl) * (xbr - xtl) >= AREA_TRESHOLD) {
+                        const box = {
+                            xtl,
+                            ytl,
+                            xbr,
+                            ybr,
+                        };
+
+                        if (this._mode === 'interpolation') {
+                            box.outside = false;
+                        }
+
+                        this._controller.finish(box, this._type);
+                    }
+
+                    this._controller.switchCreateMode(true);
+                })
+                .on('drawupdate', (e) => {
+                    sizeUI = drawBoxSize.call(sizeUI, this._frameContent,
+                        this._frameText, e.target.getBBox());
+                })
+                .on('drawcancel', () => {
+                    if (sizeUI) {
+                        sizeUI.rm();
+                        sizeUI = null;
+                    }
+                });
             break;
         case 'box_by_4_points':
             let numberOfPoints = 0;
             this._drawInstance = this._frameContent.polyline().draw({ snapToGrid: 0.1 })
                 .addClass('shapeCreation').attr({
                     'stroke-width': 0,
-                }).on('drawstart', () => {
+                })
+                .on('drawstart', () => {
                     // init numberOfPoints as one on drawstart
                     numberOfPoints = 1;
-                }).on('drawpoint', (e) => {
+                })
+                .on('drawpoint', (e) => {
                     // increase numberOfPoints by one on drawpoint
                     numberOfPoints += 1;
 
@@ -776,10 +803,10 @@ class ShapeCreatorView {
 
                         // init bounding box
                         const box = {
-                            'xtl': frameWidth,
-                            'ytl': frameHeight,
-                            'xbr': 0,
-                            'ybr': 0
+                            xtl: frameWidth,
+                            ytl: frameHeight,
+                            xbr: 0,
+                            ybr: 0,
                         };
 
                         for (const point of actualPoints) {
@@ -803,11 +830,14 @@ class ShapeCreatorView {
                         }
                         this._controller.switchCreateMode(true);
                     }
-                }).on('undopoint', () => {
+                })
+                .on('undopoint', () => {
                     if (numberOfPoints > 0) {
                         numberOfPoints -= 1;
                     }
-                }).off('drawdone').on('drawdone', () => {
+                })
+                .off('drawdone')
+                .on('drawdone', () => {
                     if (numberOfPoints !== 4) {
                         showMessage('Click exactly four extreme points for an object');
                         this._controller.switchCreateMode(true);
@@ -827,34 +857,34 @@ class ShapeCreatorView {
         case 'polygon':
             if (this._polyShapeSize && this._polyShapeSize < 3) {
                 if (!$('.drawAllert').length) {
-                    showMessage("Min 3 points must be for polygon drawing.").addClass('drawAllert');
+                    showMessage('Min 3 points must be for polygon drawing.').addClass('drawAllert');
                 }
                 this._controller.switchCreateMode(true);
                 return;
             }
             this._drawInstance = this._frameContent.polygon().draw({ snapToGrid: 0.1 })
                 .addClass('shapeCreation').attr({
-                    'stroke-width':  STROKE_WIDTH / this._scale,
+                    'stroke-width': STROKE_WIDTH / this._scale,
                 });
             this._createPolyEvents();
             break;
         case 'polyline':
             if (this._polyShapeSize && this._polyShapeSize < 2) {
                 if (!$('.drawAllert').length) {
-                    showMessage("Min 2 points must be for polyline drawing.").addClass('drawAllert');
+                    showMessage('Min 2 points must be for polyline drawing.').addClass('drawAllert');
                 }
                 this._controller.switchCreateMode(true);
                 return;
             }
             this._drawInstance = this._frameContent.polyline().draw({ snapToGrid: 0.1 })
                 .addClass('shapeCreation').attr({
-                    'stroke-width':  STROKE_WIDTH / this._scale,
+                    'stroke-width': STROKE_WIDTH / this._scale,
                 });
             this._createPolyEvents();
             break;
-        case "cuboid":
-            this._drawInstance = this._frameContent.polyline().draw({ snapToGrid: 0.1 }).addClass("shapeCreation").attr({
-                "stroke-width": STROKE_WIDTH / this._scale,
+        case 'cuboid':
+            this._drawInstance = this._frameContent.polyline().draw({ snapToGrid: 0.1 }).addClass('shapeCreation').attr({
+                'stroke-width': STROKE_WIDTH / this._scale,
             });
             this._createPolyEvents();
             break;
@@ -865,8 +895,8 @@ class ShapeCreatorView {
 
     _rescaleDrawPoints() {
         const scale = this._scale;
-        $(".svg_draw_point").each(function () {
-            this.instance.radius(2.5 / scale).attr("stroke-width", 1 / scale);
+        $('.svg_draw_point').each(function () {
+            this.instance.radius(2.5 / scale).attr('stroke-width', 1 / scale);
         });
     }
 
@@ -876,14 +906,14 @@ class ShapeCreatorView {
                 x: this._frameContent.line(0, this._aimCoord.y, this._frameContent.node.clientWidth, this._aimCoord.y)
                     .attr({
                         'stroke-width': STROKE_WIDTH / this._scale,
-                        'stroke': 'red',
-                        'z_order': Number.MAX_SAFE_INTEGER,
+                        stroke: 'red',
+                        z_order: Number.MAX_SAFE_INTEGER,
                     }).addClass('aim'),
                 y: this._frameContent.line(this._aimCoord.x, 0, this._aimCoord.x, this._frameContent.node.clientHeight)
                     .attr({
                         'stroke-width': STROKE_WIDTH / this._scale,
-                        'stroke': 'red',
-                        'z_order': Number.MAX_SAFE_INTEGER,
+                        stroke: 'red',
+                        z_order: Number.MAX_SAFE_INTEGER,
                     }).addClass('aim'),
             };
         }
@@ -907,28 +937,26 @@ class ShapeCreatorView {
                 if (!model.usingShortkey) {
                     this._aimCoord = {
                         x: 0,
-                        y: 0
+                        y: 0,
                     };
                 }
                 this._drawAim();
             }
 
-            this._createButton.text("Stop Creation");
+            this._createButton.text('Stop Creation');
             document.oncontextmenu = () => false;
             this._create();
-        }
-        else {
+        } else {
             this._removeAim();
             this._cancel = true;
-            this._createButton.text("Create Shape");
+            this._createButton.text('Create Shape');
             document.oncontextmenu = null;
             if (this._drawInstance) {
                 // We save current result for poly shape if it's need
                 // drawInstance will be removed after save when drawdone handler calls switchCreateMode with force argument
                 if (model.saveCurrent && this._type != 'box') {
                     this._drawInstance.draw('done');
-                }
-                else {
+                } else {
                     this._drawInstance.draw('cancel');
                     this._drawInstance.remove();
                     this._drawInstance = null;

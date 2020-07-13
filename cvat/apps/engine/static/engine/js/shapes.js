@@ -1,3 +1,5 @@
+/* eslint-disable no-console */
+/* eslint-disable prefer-destructuring */
 /* eslint-disable no-underscore-dangle */
 /* eslint-disable default-case */
 /* eslint-disable max-len */
@@ -357,7 +359,7 @@ class ShapeModel extends Listener {
         const oldPos = Object.assign({}, this._positions[frame]);
         window.cvat.addAction('Change Outside', () => {
             if (!Object.keys(oldPos).length) {
-                // Frame hasn't been a keyframe, remove it from position and redestribute attributes
+                // Frame hasn't been a keyframe, remove it from position and redistribute attributes
                 delete this._positions[frame];
                 this._frame = Math.min(...Object.keys(this._positions).map((el) => +el));
                 if (frame < this._frame && frame in this._attributes.mutable) {
@@ -381,7 +383,7 @@ class ShapeModel extends Listener {
         position.outside = !position.outside;
         this.updatePosition(frame, position, true);
 
-        // Update the start frame if need and redestribute attributes
+        // Update the start frame if need and redistribute attributes
         if (frame < this._frame) {
             if (this._frame in this._attributes.mutable) {
                 this._attributes.mutable[frame] = this._attributes.mutable[this._frame];
@@ -412,7 +414,7 @@ class ShapeModel extends Listener {
         // End of undo/redo code
 
         if (frame in this._positions && Object.keys(this._positions).length > 1) {
-            // If frame is first object frame, need redestribute attributes
+            // If frame is first object frame, need redistribute attributes
             if (frame === this._frame) {
                 this._frame = Object.keys(this._positions).map((el) => +el).sort((a, b) => a - b)[1];
                 if (frame in this._attributes.mutable) {
@@ -2076,7 +2078,7 @@ class ShapeView extends Listener {
 
                 block.appendChild(htmlLabel);
 
-                // Make it beaturiful. Group attributes by type:
+                // Make it beautiful. Group attributes by type:
                 const attrByType = {};
                 for (const attrId in attributes) {
                     const attrInfo = window.cvat.labelsInfo.attrInfo(attrId);
@@ -2478,7 +2480,7 @@ class ShapeView extends Listener {
         }
     }
 
-    // Inteface methods
+    // Interface methods
     draw(interpolation) {
         const { outside } = interpolation.position;
 
@@ -3221,6 +3223,9 @@ class PointsView extends PolyShapeView {
     }
 }
 
+/**
+ * Wtf
+ */
 function buildShapeModel(data, type, clientID, color) {
     switch (type) {
     case 'interpolation_box':

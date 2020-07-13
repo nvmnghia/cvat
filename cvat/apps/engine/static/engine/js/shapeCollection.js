@@ -1,3 +1,5 @@
+/* eslint-disable guard-for-in */
+/* eslint-disable no-use-before-define */
 /* eslint-disable no-alert */
 /* eslint-disable eqeqeq */
 /* eslint-disable default-case */
@@ -36,6 +38,9 @@
 class ShapeCollectionModel extends Listener {
     constructor() {
         super('onCollectionUpdate', () => this);
+
+        // List of frame's shapes.
+        // It can't be an array, as array has to be continuous.
         this._annotationShapes = {};
         this._groups = {};
         this._interpolationShapes = [];
@@ -386,6 +391,15 @@ class ShapeCollectionModel extends Listener {
         this._interpolate();
     }
 
+    /**
+     * Adding a shape (pressing N in CVAT).
+     *
+     * @param {*} data Shape data, including coordinates.
+     * @param {*} type Shape type string, of the following format:
+     *                   {add_mode}_{shape_type}
+     *                 add_mode could be interpolation or annotation
+     *                 shape_type could be box, polygon,...
+     */
     add(data, type) {
         this._idx += 1;
         const id = this._idx;
@@ -393,6 +407,7 @@ class ShapeCollectionModel extends Listener {
         if (type.startsWith('interpolation')) {
             this._interpolationShapes.push(model);
         } else {
+            // Add shape to list of shape in the frame.
             this._annotationShapes[model.frame] = this._annotationShapes[model.frame] || [];
             this._annotationShapes[model.frame].push(model);
         }
@@ -1631,8 +1646,8 @@ class ShapeCollectionView {
         }
     }
 
-    // If ShapeGrouperModel was disabled, need to update shape appearence
-    // In order to don't dublicate function, I simulate checkbox change event
+    // If ShapeGrouperModel was disabled, need to update shape appearance
+    // In order to don't duplicate function, I simulate checkbox change event
     onGrouperUpdate(grouper) {
         if (!grouper.active && this._colorByGroupRadio.prop('checked')) {
             this._colorByGroupRadio.trigger('change');

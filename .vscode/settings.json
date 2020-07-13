@@ -36,6 +36,31 @@
     "licenser.customHeader": "Copyright (C) @YEAR@ Intel Corporation\n\nSPDX-License-Identifier: MIT",
     "files.trimTrailingWhitespace": true,
     "cSpell.words": [
-        "cvat"
+        "Allert",
+        "Coeff",
+        "Coord",
+        "Polylines",
+        "Polyshape",
+        "SPDX",
+        "Shortkey",
+        "Treshold",
+        "changelabel",
+        "cvat",
+        "drawcancel",
+        "drawdone",
+        "drawpoint",
+        "drawstart",
+        "drawstop",
+        "groupping",
+        "lable",
+        "polybox",
+        "polyshapes",
+        "positionate",
+        "resizedone",
+        "resizestart",
+        "segm",
+        "selectize",
+        "shortkeys",
+        "undopoint"
     ]
 }

@@ -1,3 +1,5 @@
+/* eslint-disable no-plusplus */
+/* eslint-disable eqeqeq */
 /*
  * Copyright (C) 2018 Intel Corporation
  *
@@ -11,11 +13,12 @@
     Logger:false
     Mousetrap:false
 */
-"use strict";
+
+'use strict';
 
 class HistoryModel extends Listener {
     constructor(playerModel) {
-        super('onHistoryUpdate', () => this );
+        super('onHistoryUpdate', () => this);
 
         this._deep = 128;
         this._id = 0;
@@ -28,8 +31,8 @@ class HistoryModel extends Listener {
     }
 
     undo() {
-        let frame = window.cvat.player.frames.current;
-        let undo = this._undo_stack.pop();
+        const frame = window.cvat.player.frames.current;
+        const undo = this._undo_stack.pop();
 
         if (undo) {
             try {
@@ -43,12 +46,10 @@ class HistoryModel extends Listener {
                 }
                 this._locked = true;
                 undo.undo();
-            }
-            catch(err) {
+            } catch (err) {
                 this.notify();
                 throw err;
-            }
-            finally {
+            } finally {
                 this._locked = false;
             }
 
@@ -59,8 +60,8 @@ class HistoryModel extends Listener {
     }
 
     redo() {
-        let frame = window.cvat.player.frames.current;
-        let redo = this._redo_stack.pop();
+        const frame = window.cvat.player.frames.current;
+        const redo = this._redo_stack.pop();
 
         if (redo) {
             try {
@@ -74,12 +75,10 @@ class HistoryModel extends Listener {
                 }
                 this._locked = true;
                 redo.redo();
-            }
-            catch(err) {
+            } catch (err) {
                 this.notify();
                 throw err;
-            }
-            finally {
+            } finally {
                 this._locked = false;
             }
 
@@ -96,10 +95,10 @@ class HistoryModel extends Listener {
         }
 
         this._undo_stack.push({
-            name: name,
-            undo: undo,
-            redo: redo,
-            frame: frame,
+            name,
+            undo,
+            redo,
+            frame,
             id: this._id++,
         });
         this._redo_stack = [];
@@ -122,22 +121,21 @@ class HistoryModel extends Listener {
     }
 
     get lastUndoText() {
-        let lastUndo = this._undo_stack[this._undo_stack.length - 1];
+        const lastUndo = this._undo_stack[this._undo_stack.length - 1];
         if (lastUndo) {
             return `${lastUndo.name} [Frame ${lastUndo.frame}] [Id ${lastUndo.id}]`;
         }
-        else return 'None';
+        return 'None';
     }
 
     get lastRedoText() {
-        let lastRedo = this._redo_stack[this._redo_stack.length - 1];
+        const lastRedo = this._redo_stack[this._redo_stack.length - 1];
         if (lastRedo) {
             return `${lastRedo.name} [Frame ${lastRedo.frame}] [Id ${lastRedo.id}]`;
         }
-        else return 'None';
+        return 'None';
     }
 }
-
 
 class HistoryController {
     constructor(model) {
@@ -145,19 +143,19 @@ class HistoryController {
         setupCollectionShortcuts.call(this);
 
         function setupCollectionShortcuts() {
-            let undoHandler = Logger.shortkeyLogDecorator(function(e) {
+            const undoHandler = Logger.shortkeyLogDecorator((e) => {
                 this.undo();
                 e.preventDefault();
-            }.bind(this));
+            });
 
-            let redoHandler = Logger.shortkeyLogDecorator(function(e) {
+            const redoHandler = Logger.shortkeyLogDecorator((e) => {
                 this.redo();
                 e.preventDefault();
-            }.bind(this));
+            });
 
-            let shortkeys = window.cvat.config.shortkeys;
-            Mousetrap.bind(shortkeys["undo"].value, undoHandler.bind(this), 'keydown');
-            Mousetrap.bind(shortkeys["redo"].value, redoHandler.bind(this), 'keydown');
+            const { shortkeys } = window.cvat.config;
+            Mousetrap.bind(shortkeys.undo.value, undoHandler.bind(this), 'keydown');
+            Mousetrap.bind(shortkeys.redo.value, redoHandler.bind(this), 'keydown');
         }
     }
 
@@ -174,7 +172,6 @@ class HistoryController {
     }
 }
 
-
 class HistoryView {
     constructor(controller, model) {
         this._controller = controller;
@@ -183,9 +180,9 @@ class HistoryView {
         this._lastUndoText = $('#lastUndoText');
         this._lastRedoText = $('#lastRedoText');
 
-        let shortkeys = window.cvat.config.shortkeys;
-        this._undoButton.attr('title', `${shortkeys['undo'].view_value} - ${shortkeys['undo'].description}`);
-        this._redoButton.attr('title', `${shortkeys['redo'].view_value} - ${shortkeys['redo'].description}`);
+        const { shortkeys } = window.cvat.config;
+        this._undoButton.attr('title', `${shortkeys.undo.view_value} - ${shortkeys.undo.description}`);
+        this._redoButton.attr('title', `${shortkeys.redo.view_value} - ${shortkeys.redo.description}`);
 
         this._undoButton.on('click', () => {
             this._controller.undo();
@@ -201,15 +198,13 @@ class HistoryView {
     onHistoryUpdate(model) {
         if (model.undoLength) {
             this._undoButton.prop('disabled', false);
-        }
-        else {
+        } else {
             this._undoButton.prop('disabled', true);
         }
 
         if (model.redoLength) {
             this._redoButton.prop('disabled', false);
-        }
-        else {
+        } else {
             this._redoButton.prop('disabled', true);
         }
 
