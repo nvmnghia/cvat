@@ -162,6 +162,7 @@ class ShapeCreatorController {
     constructor(drawerModel) {
         this._model = drawerModel;
         setupShortkeys.call(this);
+
         function setupShortkeys() {
             const { shortkeys } = window.cvat.config;
 
@@ -755,10 +756,7 @@ class ShapeCreatorView {
 
                     if ((ybr - ytl) * (xbr - xtl) >= AREA_TRESHOLD) {
                         const box = {
-                            xtl,
-                            ytl,
-                            xbr,
-                            ybr,
+                            xtl, ytl, xbr, ybr,
                         };
 
                         if (this._mode === 'interpolation') {

@@ -231,6 +231,14 @@ class ShapeCollectionModel extends Listener {
         }
     }
 
+    /**
+     * Import data to ShapeCollectionModel to render.
+     * In buildAnnotationUI(), there is a case of this function
+     * followed by ShapeCollectionModel::update().
+     * Is it mandatory?
+     *
+     * @param {*} data Data of all shapes in this job.
+     */
     import(data) {
         function _convertShape(shape) {
             if (shape.type === 'rectangle') {
@@ -1342,7 +1350,7 @@ class ShapeCollectionView {
                 this._controller.switchOrientationFromActiveShape();
                 break;
             case 'split_row':
-                alert('row');
+                let a = 1;
                 break;
             case 'split_column':
                 alert('column');

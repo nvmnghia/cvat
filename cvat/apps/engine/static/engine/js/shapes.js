@@ -2697,6 +2697,7 @@ class ShapeView extends Listener {
             if (!hiddenShape) {
                 this._drawShapeUI(interpolation.position);
                 this._setupOccludedUI(interpolation.position.occluded);
+
                 if (!hiddenText || active) {
                     this._showShapeText();
                 }
@@ -2873,13 +2874,17 @@ class BoxView extends ShapeView {
         const width = position.xbr - position.xtl;
         const height = position.ybr - position.ytl;
 
-        this._uis.shape = this._scenes.svg.rect().size(width, height).attr({
-            fill: this._appearance.fill || this._appearance.colors.shape,
-            stroke: this._appearance.stroke || this._appearance.colors.shape,
-            'stroke-width': STROKE_WIDTH / window.cvat.player.geometry.scale,
-            z_order: position.z_order,
-            'fill-opacity': this._appearance.fillOpacity,
-        }).move(position.xtl, position.ytl)
+        this._uis.shape = this._scenes.svg
+            .rect()
+            .size(width, height)
+            .attr({
+                fill: this._appearance.fill || this._appearance.colors.shape,
+                stroke: this._appearance.stroke || this._appearance.colors.shape,
+                'stroke-width': STROKE_WIDTH / window.cvat.player.geometry.scale,
+                z_order: position.z_order,
+                'fill-opacity': this._appearance.fillOpacity,
+            })
+            .move(position.xtl, position.ytl)
             .addClass('shape');
 
         ShapeView.prototype._drawShapeUI.call(this);

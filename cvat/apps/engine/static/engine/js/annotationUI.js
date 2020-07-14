@@ -555,12 +555,15 @@ function buildAnnotationUI(
     window.cvat.config = new Config();
 
     // Setup components
-    const annotationParser = new AnnotationParser({
-        start: window.cvat.player.frames.start,
-        stop: window.cvat.player.frames.stop,
-        flipped: taskData.flipped,
-        image_meta_data: imageMetaData,
-    }, window.cvat.labelsInfo);
+    const annotationParser = new AnnotationParser(
+        {
+            start: window.cvat.player.frames.start,
+            stop: window.cvat.player.frames.stop,
+            flipped: taskData.flipped,
+            image_meta_data: imageMetaData,
+        },
+        window.cvat.labelsInfo,
+    );
 
     const shapeCollectionModel = new ShapeCollectionModel().import(annotationData);
     const shapeCollectionController = new ShapeCollectionController(shapeCollectionModel);
