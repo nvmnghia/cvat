@@ -15,6 +15,16 @@
  * Let's dig.
  */
 class Listener {
+    /**
+     * Listener (subscriber) interface, doubles as publisher.
+     *
+     * @param {*} notifyCallbackName Name of a function that all subscribers
+     *                               have to implement. When notify() is called,
+     *                               subscribers are notified by calling their
+     *                               implementations of notifyCallbackName.
+     * @param {*} getStateCallback   Get state. The state returned will be
+     *                               passed to the subscribers.
+     */
     constructor(notifyCallbackName, getStateCallback) {
         this._listeners = [];
         this._notifyCallbackName = notifyCallbackName;
@@ -48,6 +58,12 @@ class Listener {
         }
     }
 
+    /**
+     * Notify subscribers.
+     * When called, subscribers are notified by
+     * calling their implementations of notifyCallbackName,
+     * with state (from getStateCallback()) as the parameter.
+     */
     notify() {
         const state = this._getStateCallback();
         for (const listener of this._listeners) {

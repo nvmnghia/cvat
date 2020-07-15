@@ -52,14 +52,8 @@ class ShapeCollectionModel extends Listener {
         this._frame = null;
         this._activeShape = null;
         this._flush = false;
-        this._lastPos = {
-            x: 0,
-            y: 0,
-        };
-        this._z_order = {
-            max: 0,
-            min: 0,
-        };
+        this._lastPos = { x: 0, y: 0 };
+        this._z_order = { max: 0, min: 0 };
         this._colors = [
             '#0066FF', '#AF593E', '#01A368', '#FF861F', '#ED0A3F', '#FF3F34', '#76D7EA',
             '#8359A3', '#FBE870', '#C5E17A', '#03BB85', '#FFDF00', '#8B8680', '#0A6B0D',
@@ -1102,6 +1096,17 @@ class ShapeCollectionController {
         const { activeShape } = this._model;
         if (activeShape && typeof (activeShape.draggable) !== 'undefined') {
             activeShape.draggable = !activeShape.draggable;
+        }
+    }
+
+    splitActiveShape(e) {
+        if (window.cvat.mode === null) {
+            this._model.selectShape(this._model.lastPosition, false);
+            const { activeShape } = this._model;
+            if (activeShape) {
+                // TODO: Lock checking.
+                activeShape.split();
+            }
         }
     }
 

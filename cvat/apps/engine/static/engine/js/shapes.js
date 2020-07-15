@@ -473,20 +473,28 @@ class ShapeModel extends Listener {
         }
     }
 
-    // Explicit remove by user
-    remove() {
-        Logger.addEvent(Logger.EventType.deleteObject, {
-            count: 1,
-        });
+    split() {
+        Logger.addEvent(Logger.EventType.splitObject, { row: 2, column: 2 });
 
+
+    }
+
+    /**
+     * Remove model.
+     */
+    remove() {
+        Logger.addEvent(Logger.EventType.deleteObject, { count: 1 });
+
+        // Also notify subscribers.
         this.removed = true;
 
         // Undo/redo code
-        window.cvat.addAction('Remove Object', () => {
-            this.removed = false;
-        }, () => {
-            this.removed = true;
-        }, window.cvat.player.frames.current);
+        window.cvat.addAction(
+            'Remove Object',
+            () => { this.removed = false; },
+            () => { this.removed = true; },
+            window.cvat.player.frames.current,
+        );
         // End of undo/redo code
     }
 

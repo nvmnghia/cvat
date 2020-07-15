@@ -1,3 +1,7 @@
+/* eslint-disable vars-on-top */
+/* eslint-disable no-underscore-dangle */
+/* eslint-disable no-plusplus */
+/* eslint-disable no-var */
 /*
  * Copyright (C) 2018 Intel Corporation
  *
@@ -10,19 +14,19 @@
     Cookies:false
 */
 
-"use strict";
+'use strict';
 
 class UserActivityHandler {
     constructor() {
-        this._TIME_TRESHHOLD = 100000; //ms
+        this._TIME_TRESHHOLD = 100000; // ms
         this._prevEventTime = Date.now();
         this._workingTime = 0;
     }
 
     updateTimer() {
         if (document.hasFocus()) {
-            let now = Date.now();
-            let diff = now - this._prevEventTime;
+            const now = Date.now();
+            const diff = now - this._prevEventTime;
             this._prevEventTime = now;
             this._workingTime += diff < this._TIME_TRESHHOLD ? diff : 0;
         }
@@ -79,17 +83,17 @@ class LoggerHandler {
         this._extendEvent(exception);
         return new Promise((resolve, reject) => {
             let retries = 3;
-            let makeRequest = () => {
-                let xhr = new XMLHttpRequest();
+            const makeRequest = () => {
+                const xhr = new XMLHttpRequest();
                 xhr.open('POST', '/api/v1/server/exception');
                 xhr.setRequestHeader('Content-Type', 'application/json');
-                xhr.setRequestHeader("X-CSRFToken", Cookies.get('csrftoken'));
-                let onreject = () => {
+                xhr.setRequestHeader('X-CSRFToken', Cookies.get('csrftoken'));
+                const onreject = () => {
                     if (retries--) {
-                        setTimeout(() => makeRequest(), 30000); //30 sec delay
+                        setTimeout(() => makeRequest(), 30000); // 30 sec delay
                     } else {
-                        let payload = exception.serialize();
-                        delete Object.assign(payload, {origin_message: payload.message }).message;
+                        const payload = exception.serialize();
+                        delete Object.assign(payload, { origin_message: payload.message }).message;
                         this.addEvent(new Logger.LogEvent(
                             Logger.EventType.sendException,
                             payload,
@@ -103,13 +107,13 @@ class LoggerHandler {
                 };
                 xhr.onload = () => {
                     switch (xhr.status) {
-                        case 201:
-                        case 403: // ignore forbidden response
-                            resolve(xhr.response);
-                            break;
+                    case 201:
+                    case 403: // ignore forbidden response
+                        resolve(xhr.response);
+                        break;
 
-                        default:
-                            onreject();
+                    default:
+                        onreject();
                     }
                 };
                 xhr.onerror = () => {
@@ -127,7 +131,7 @@ class LoggerHandler {
     }
 
     getLogs() {
-        let logs = new LogCollection(this, this._logEvents);
+        const logs = new LogCollection(this, this._logEvents);
         this._logEvents.length = 0;
         return logs;
     }
@@ -145,8 +149,7 @@ class LoggerHandler {
         this._extendEvent(event);
         if (event._type in this._timeThresholds) {
             this._timeThresholds[event._type].wait(event);
-        }
-        else {
+        } else {
             this._logEvents.push(event);
         }
         this._userActivityHandler.updateTimer();
@@ -175,13 +178,12 @@ class LoggerHandler {
             _timestamp: 0,
             _event: null,
             _logEvents: this._logEvents,
-            wait: function(event) {
+            wait(event) {
                 if (this._event) {
                     if (this._timeoutHandler) {
                         clearTimeout(this._timeoutHandler);
                     }
-                }
-                else {
+                } else {
                     this._timestamp = event._timestamp;
                 }
                 this._event = event;
@@ -197,7 +199,6 @@ class LoggerHandler {
         };
     }
 }
-
 
 /*
 Log message has simple json format - each message is set of "key" : "value"
@@ -237,14 +238,14 @@ class LoggerEvent {
     }
 
     serialize() {
-        let serializedObj = {
+        const serializedObj = {
             job_id: this._jobId,
             client_id: this._clientId,
             name: Logger.eventTypeToString(this._type),
             time: this._time,
         };
         if (this._message) {
-            Object.assign(serializedObj, { message: this._message,});
+            Object.assign(serializedObj, { message: this._message });
         }
         return serializedObj;
     }
@@ -278,7 +279,7 @@ var Logger = {
                 payload: this._values,
                 is_active: this._is_active,
             });
-        };
+        }
 
         close(endTimestamp) {
             if (this.onCloseCallback) {
@@ -287,11 +288,11 @@ var Logger = {
                 });
                 this.onCloseCallback(this);
             }
-        };
+        }
 
         addValues(values) {
             Object.assign(this._values, values);
-        };
+        }
     },
 
     ExceptionEvent: class extends LoggerEvent {
@@ -315,7 +316,7 @@ var Logger = {
                 stack: this._stack,
                 system: this._system,
             });
-        };
+        }
     },
 
     /**
@@ -329,6 +330,9 @@ var Logger = {
         changeAttribute: 1,
         // dumped as "Drag object". There are no additional required fields.
         dragObject: 2,
+        // dumped as "Split object". "row" and "col" are required fields,
+        // these values should be positive number.
+        splitObject: 27,
         // dumped as "Delete object". "count" is required field, value of
         // deleted objects should be positive number.
         deleteObject: 3,
@@ -404,9 +408,8 @@ var Logger = {
      * @return {Bool} true if initialization was succeed
      * @static
      */
-    initializeLogger: function(jobId) {
-        if (!this._logger)
-        {
+    initializeLogger(jobId) {
+        if (!this._logger) {
             this._logger = new LoggerHandler(jobId);
             return true;
         }
@@ -420,7 +423,7 @@ var Logger = {
      * @param {String} message Any string message. Empty by default.
      * @static
      */
-    addEvent: function(type, values, message='') {
+    addEvent(type, values, message = '') {
         this._logger.addEvent(new Logger.LogEvent(type, values, message));
     },
 
@@ -436,7 +439,7 @@ var Logger = {
      * @return {LogEvent} instance of LogEvent
      * @static
      */
-    addContinuedEvent: function(type, values, message='') {
+    addContinuedEvent(type, values, message = '') {
         return this._logger.addContinuedEvent(new Logger.LogEvent(type, values, message));
     },
 
@@ -448,14 +451,14 @@ var Logger = {
      * @return {Function} is decorated decoredFunc
      * @static
      */
-    shortkeyLogDecorator: function(decoredFunc) {
-        let self = this;
-        return function(e, combo) {
+    shortkeyLogDecorator(decoredFunc) {
+        const self = this;
+        return function (e, combo) {
             if (window.cvat.frozen) {
                 return;
             }
-            let pressKeyEvent = self.addContinuedEvent(self.EventType.pressShortcut, {key:  combo});
-            let returnValue = decoredFunc(e, combo);
+            const pressKeyEvent = self.addContinuedEvent(self.EventType.pressShortcut, { key: combo });
+            const returnValue = decoredFunc(e, combo);
             pressKeyEvent.close();
             return returnValue;
         };
@@ -468,7 +471,7 @@ var Logger = {
      * @static
      */
 
-    sendException: function(message, filename, line, column, stack, client, system) {
+    sendException(message, filename, line, column, stack, client, system) {
         return this._logger.sendExceptions(
             new Logger.ExceptionEvent(
                 message,
@@ -477,8 +480,8 @@ var Logger = {
                 column,
                 stack,
                 client,
-                system
-            )
+                system,
+            ),
         );
     },
 
@@ -487,11 +490,9 @@ var Logger = {
      * @return {Array}
      * @static
      */
-    getLogs: function(appendUserActivity=true)
-    {
-        if (appendUserActivity)
-        {
-            this.addEvent(Logger.EventType.sendUserActivity, {'working time': this._logger.getWorkingTime()});
+    getLogs(appendUserActivity = true) {
+        if (appendUserActivity) {
+            this.addEvent(Logger.EventType.sendUserActivity, { 'working time': this._logger.getWorkingTime() });
             this._logger.resetTimer();
         }
 
@@ -502,8 +503,7 @@ var Logger = {
      * time calculation logic
      * @static
      */
-    updateUserActivityTimer: function()
-    {
+    updateUserActivityTimer() {
         this._logger.updateTimer();
     },
 
@@ -517,8 +517,7 @@ var Logger = {
      * @param {Logger.EventType} eventType
      * @param {Number} threshold
      */
-    setTimeThreshold: function(eventType, threshold=500)
-    {
+    setTimeThreshold(eventType, threshold = 500) {
         this._logger.setTimeThreshold(eventType, threshold);
     },
 
@@ -528,9 +527,8 @@ var Logger = {
      * @return {String} string reppresentation of Logger.EventType
      * @static
      */
-    eventTypeToString: function(type)
-    {
-        switch(type) {
+    eventTypeToString(type) {
+        switch (type) {
         case this.EventType.pasteObject: return 'Paste object';
         case this.EventType.changeAttribute: return 'Change attribute';
         case this.EventType.dragObject: return 'Drag object';

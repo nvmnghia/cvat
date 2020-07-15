@@ -215,10 +215,7 @@ class ShapeCreatorView {
         this._createButton.on('click', () => this._controller.switchCreateMode(false));
         this._drawInstance = null;
         this._aim = null;
-        this._aimCoord = {
-            x: 0,
-            y: 0,
-        };
+        this._aimCoord = { x: 0, y: 0 };
         this._polyShapeSize = 0;
         this._type = null;
         this._mode = null;
@@ -739,6 +736,8 @@ class ShapeCreatorView {
                     z_order: Number.MAX_SAFE_INTEGER,
                 })
                 .on('drawstop', (e) => {
+                    // Add box.
+
                     if (this._cancel) return;
                     if (sizeUI) {
                         sizeUI.rm();
