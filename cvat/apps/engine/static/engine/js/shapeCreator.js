@@ -36,6 +36,11 @@ class ShapeCreatorModel extends Listener {
         this._shapeCollection = shapeCollection;
     }
 
+    /**
+     * Finish drawing and add shape.
+     *
+     * @param {*} result The shape to be added.
+     */
     finish(result) {
         const data = {};
         const frame = window.cvat.player.frames.current;
@@ -92,6 +97,9 @@ class ShapeCreatorModel extends Listener {
         this._shapeCollection.update();
     }
 
+    /**
+     * When the user press N, the UI switch to Create mode.
+     */
     switchCreateMode(forceClose, usingShortkey) {
         this._usingShortkey = usingShortkey;
         // if parameter force (bool) setup to true, current result will not save
@@ -736,7 +744,7 @@ class ShapeCreatorView {
                     z_order: Number.MAX_SAFE_INTEGER,
                 })
                 .on('drawstop', (e) => {
-                    // Add box.
+                    // Add the drawn box.
 
                     if (this._cancel) return;
                     if (sizeUI) {
@@ -780,8 +788,10 @@ class ShapeCreatorView {
             break;
         case 'box_by_4_points':
             let numberOfPoints = 0;
-            this._drawInstance = this._frameContent.polyline().draw({ snapToGrid: 0.1 })
-                .addClass('shapeCreation').attr({
+            this._drawInstance = this._frameContent.polyline()
+                .draw({ snapToGrid: 0.1 })
+                .addClass('shapeCreation')
+                .attr({
                     'stroke-width': 0,
                 })
                 .on('drawstart', () => {

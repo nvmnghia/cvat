@@ -16,9 +16,9 @@ shapeCreatorModel.subscribe(shapeCollectionModel);
 
 which means that when `shapeCollectionModel` calls `notify()`, that `shapeCollectionModel` is passed to `onShapeCreatorUpdate()` of `shapeCreatorModel`.
 
-## 1. Use case
+## 2. Use case
 
-### 1.1. Adding shape
+### 2.1. Adding shape
 
 When the user finishes drawing, this chain is called:
 
@@ -26,7 +26,7 @@ When the user finishes drawing, this chain is called:
 on('drawstop') -> ShapeCreatorController::finish() -> ShapeCreatorModel::finish() -> ShapeCollectionModel::add() -> buildShapeModel() -> BoxModel()
 ```
 
-### 1.2. Removing shape
+### 2.2. Removing shape
 
 When the user presses <kbd>Del</kbd>, the following chain is called:
 
@@ -40,4 +40,71 @@ The created `Model` subscribes `ShapeCollectionModel`, and is then fed to a corr
 
 ```text
 buildShapeController() -> BoxController() -> ShapeController()
+```
+
+### 2.3. Example structure
+
+`data` that is passed into `BoxModel`'s constructor:
+
+```js
+data = {
+    attributes: [],
+    frame: 0,
+    group: 0,
+    label_id: 1,
+    occluded: false,
+    outside: false,
+    xbr: 2177.1610717773438,
+    xtl: 1841.552734375,
+    ybr: 2175.7931518554688,
+    ytl: 1583.603515625,
+    z_order: 1
+}
+```
+
+`activeShape`, which is a `BoxModel`:
+
+```js
+activeShape = {
+    _active: true,
+    _activeAttributeId: null,
+    _attributes: {
+        immutable: {},
+        mutable: {
+            0: { 1: '' }
+        }
+    },
+    _clipToFrame: true,
+    _color: {
+        shape: '#AF593E',
+        ui: '#AF593E'
+    },
+    _frame: 0,
+    _getStateCallback: () => this,
+    _groupId: 0,
+    _hiddenShape: false,
+    _hiddenText: true,
+    _id: 1,
+    _label: 1,
+    _listeners: [ShapeCollectionModel, BoxView],
+    _locked: false,
+    _merge: false,
+    _merging: false,
+    _notifyCallbackName: 'onShapeUpdate',
+    _positions: {
+        0: {
+            occluded: false,
+            xbr: 2177.1610717773438,
+            xtl: 1841.552734375,
+            ybr: 2175.7931518554688,
+            ytl: 1583.603515625,
+            z_order: 1
+        }
+    },
+    _removed: false,
+    _selected: false,
+    _serverID: undefined,
+    _type: 'annotation_box',
+    _updateReason: null
+}
 ```

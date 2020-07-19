@@ -473,12 +473,6 @@ class ShapeModel extends Listener {
         }
     }
 
-    split() {
-        Logger.addEvent(Logger.EventType.splitObject, { row: 2, column: 2 });
-
-
-    }
-
     /**
      * Remove model.
      */

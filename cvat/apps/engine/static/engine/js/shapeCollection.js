@@ -1,3 +1,4 @@
+/* eslint-disable no-multi-spaces */
 /* eslint-disable guard-for-in */
 /* eslint-disable no-use-before-define */
 /* eslint-disable no-alert */
@@ -1099,14 +1100,79 @@ class ShapeCollectionController {
         }
     }
 
-    splitActiveShape(e) {
-        if (window.cvat.mode === null) {
-            this._model.selectShape(this._model.lastPosition, false);
-            const { activeShape } = this._model;
-            if (activeShape) {
-                // TODO: Lock checking.
-                activeShape.split();
+    /**
+     * Given the number of row and column,
+     * split the box accordingly.
+     *
+     * @param row {number} Number of row to split. 1 if don't split row.
+     * @param col {number} Number of column to split. 1 if don't split column.
+     */
+    splitActiveBox(row, col) {
+        if (row === 1 && col === 1) {
+            return;
+        }
+
+        // Margin between child boxes.
+        const SPACING = 10;
+
+        // TODO: check window.cvat.mode.
+        this._model.selectShape(this._model.lastPosition, false);
+        const { activeShape } = this._model;
+
+        // First remove the active box.
+        // Before removing, some attributes in activeShape must be backup.
+        const {
+            xtl, ytl, xbr, ybr, occluded, z_order,
+        } = activeShape._positions[0];
+        const { frame } = activeShape;
+        const group = activeShape.groupId;
+        const label_id = activeShape.label;
+
+        this.removeActiveShape({ shiftKey: true });    // TODO: Check Shift and lock.
+
+        const width = xbr - xtl;
+        const childBoxWidth = (width - SPACING * (col - 1)) / col;
+        const height = ybr - ytl;
+        const childBoxHeight = (height - SPACING * (row - 1)) / row;
+
+        if (childBoxWidth * childBoxHeight < AREA_TRESHOLD) {
+            return;
+        }
+
+        // Then add splitted box.
+        for (let i = 0; i < row; ++i) {
+            for (let j = 0; j < col; ++j) {
+                const c_xtl = xtl + j * (childBoxWidth + SPACING);
+                const c_xbr = c_xtl + childBoxWidth;
+                const c_ytl = ytl + j * childBoxHeight;
+                const c_ybr = c_ytl + (childBoxHeight + SPACING);
+
+                this._model.add(
+                    {
+                        attributes: [],
+                        frame,
+                        group,
+                        label_id,
+                        occluded,
+                        outside: false,    // TODO: Check how outside is determined.
+                        xtl: c_xtl,
+                        ytl: c_ytl,
+                        xbr: c_xbr,
+                        ybr: c_ybr,
+                        z_order,
+                    },
+                    'annotation_box',
+                );
             }
+        }
+
+        /**
+         * Add split boxes.
+         * These lines are copypasta of the lines in the
+         * calling chain specified in REFACTORING.md.
+         */
+        function addChildBox(data) {
+            // Copypasta ShapeCreatorModel::finish()
         }
     }
 
@@ -1355,13 +1421,16 @@ class ShapeCollectionView {
                 this._controller.switchOrientationFromActiveShape();
                 break;
             case 'split_row':
-                let a = 1;
+                dialogSplitBox(true, false,
+                    (row, col) => this._controller.splitActiveBox(row, col));
                 break;
             case 'split_column':
-                alert('column');
+                dialogSplitBox(false, true,
+                    (row, col) => this._controller.splitActiveBox(row, col));
                 break;
             case 'split_table':
-                alert('table');
+                dialogSplitBox(true, true,
+                    (row, col) => this._controller.splitActiveBox(row, col));
                 break;
             }
         });
@@ -1461,7 +1530,8 @@ class ShapeCollectionView {
             const mainDiv = $('<div> </div>').addClass('labelContentElement h2 regular hidden')
                 .css({
                     'background-color': collectionController.colorsByGroup(+window.cvat.labelsInfo.labelColorIdx(+labelId)),
-                }).attr({
+                })
+                .attr({
                     label_id: labelId,
                 })
                 .on('mouseover mouseup', () => {
@@ -1499,6 +1569,73 @@ class ShapeCollectionView {
             this._labelsContent.removeClass('hidden');
             this._UIContent.addClass('hidden');
         });
+
+        /**
+         * Ask user the number of row and column to split.
+         *
+         * @param {boolean} splitIntoRow Number of row. false if only split into columns.
+         * @param {boolean} splitIntoCol Number of column. false if only split into rows.
+         * @param {ShapeCollectionController~splitActiveBox} onOK Callback to split box.
+         */
+        function dialogSplitBox(splitIntoRow, splitIntoCol, onOK) {
+            const template = $('#splitBoxTemplate');
+            const messageWindow = $(template.html()).css('display', 'block');    // Why .html()?
+
+            const messageText = messageWindow.find('.templateMessage');
+            const rowInput = messageWindow.find('span.row-input');
+            const colInput = messageWindow.find('span.col-input');
+            if (splitIntoRow && splitIntoCol) {
+                messageText.text('Set the number of row and column to split:');
+            } else if (!splitIntoRow) {    // row and col can't both be false.
+                messageText.text('Set the number of column to split:');
+                rowInput.css('display', 'none');
+            } else {
+                messageText.text('Set the number of row to split:');
+                colInput.hide();
+            }
+
+            $('body').append(messageWindow);
+
+            // Restore original state: inputs shown, errors hidden.
+            messageWindow.on('remove', () => {
+                rowInput.show();
+                colInput.show();
+                messageWindow.find('span > p').hide();
+                messageWindow.off('remove');
+            });
+
+            const okButton = messageWindow.find('.templateOKButton');
+            okButton.on('click', () => {
+                let row = 1; let col = 1;
+                let error = false;
+
+                messageWindow
+                    .find('span > input:visible')
+                    .each((_, el) => {
+                        el = $(el);
+                        const val = parseInt(el.val(), 10);
+                        if (!val || val < 1 || val > 20) {
+                            error = true;
+                            el.next().show();
+                            return false;    // Break each() early.
+                        }
+
+                        const isRowInput = el.attr('name') === 'row';
+                        if (isRowInput) row = val;
+                        else col = val;
+                    });
+
+                if (!error) {
+                    okButton.off('click');    // Why?
+                    messageWindow.remove();
+                    if (onOK) onOK(row, col);
+                }
+            });
+            okButton.focus();
+
+            const cancelButton = messageWindow.find('.templateCancelButton');
+            cancelButton.on('click', () => messageWindow.remove());
+        }
     }
 
     _updateLabelUIs() {
