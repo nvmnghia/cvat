@@ -1144,8 +1144,8 @@ class ShapeCollectionController {
             for (let j = 0; j < col; ++j) {
                 const c_xtl = xtl + j * (childBoxWidth + SPACING);
                 const c_xbr = c_xtl + childBoxWidth;
-                const c_ytl = ytl + j * childBoxHeight;
-                const c_ybr = c_ytl + (childBoxHeight + SPACING);
+                const c_ytl = ytl + i * (childBoxHeight + SPACING);
+                const c_ybr = c_ytl + childBoxHeight;
 
                 this._model.add(
                     {
