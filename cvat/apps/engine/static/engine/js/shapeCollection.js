@@ -1166,14 +1166,8 @@ class ShapeCollectionController {
             }
         }
 
-        /**
-         * Add split boxes.
-         * These lines are copypasta of the lines in the
-         * calling chain specified in REFACTORING.md.
-         */
-        function addChildBox(data) {
-            // Copypasta ShapeCreatorModel::finish()
-        }
+        // Update model, which triggers rendering.
+        this._model.update();
     }
 
     removeActiveShape(e) {
