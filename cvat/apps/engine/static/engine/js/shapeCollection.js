@@ -1166,6 +1166,8 @@ class ShapeCollectionController {
             }
         }
 
+        this._model.update();
+
         /**
          * Add split boxes.
          * These lines are copypasta of the lines in the
