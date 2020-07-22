@@ -1,10 +1,11 @@
+/* eslint-disable no-use-before-define */
 /*
  * Copyright (C) 2018-2020 Intel Corporation
  *
  * SPDX-License-Identifier: MIT
  */
 
-/* exported ShapeMergerModel ShapeMergerController ShapeMergerView*/
+/* exported ShapeMergerModel ShapeMergerController ShapeMergerView */
 
 /* global
     Listener:false
@@ -12,7 +13,7 @@
     Mousetrap:false
 */
 
-"use strict";
+'use strict';
 
 class ShapeMergerModel extends Listener {
     constructor(collectionModel) {
@@ -28,14 +29,12 @@ class ShapeMergerModel extends Listener {
             this._shapeType = shape.type.split('_')[1];
             this._shapesForMerge.push(shape);
             shape.merge = true;
-        }
-        else if (shape.type.split('_')[1] == this._shapeType) {
-            let idx = this._shapesForMerge.indexOf(shape);
+        } else if (shape.type.split('_')[1] == this._shapeType) {
+            const idx = this._shapesForMerge.indexOf(shape);
             if (idx != -1) {
                 this._shapesForMerge.splice(idx, 1);
                 shape.merge = false;
-            }
-            else {
+            } else {
                 this._shapesForMerge.push(shape);
                 shape.merge = true;
             }
@@ -53,29 +52,28 @@ class ShapeMergerModel extends Listener {
 
     done() {
         if (this._shapesForMerge.length > 1) {
-            let shapeDict = {};
+            const shapeDict = {};
 
-            for (let shape of this._shapesForMerge) {
-                let keyframes = shape.keyframes;
+            for (const shape of this._shapesForMerge) {
+                const { keyframes } = shape;
                 for (let keyframe of keyframes) {
                     keyframe = +keyframe;
-                    let interpolation = shape.interpolate(keyframe);
+                    const interpolation = shape.interpolate(keyframe);
                     if (keyframe in shapeDict && !interpolation.position.outside) {
                         shapeDict[keyframe] = {
-                            shape: shape,
-                            interpolation: interpolation
+                            shape,
+                            interpolation,
                         };
-                    }
-                    else if (!(keyframe in shapeDict)) {
+                    } else if (!(keyframe in shapeDict)) {
                         shapeDict[keyframe] = {
-                            shape: shape,
-                            interpolation: interpolation
+                            shape,
+                            interpolation,
                         };
                     }
                 }
             }
 
-            let sortedFrames = Object.keys(shapeDict).map(x => +x).sort((a,b) => a - b);
+            const sortedFrames = Object.keys(shapeDict).map(x => +x).sort((a, b) => a - b);
 
             // remove all outside in begin of the track
             while (shapeDict[sortedFrames[0]].interpolation.position.outside) {
@@ -89,9 +87,9 @@ class ShapeMergerModel extends Listener {
                 return;
             }
 
-            let label = shapeDict[sortedFrames[0]].shape.label;
+            const { label } = shapeDict[sortedFrames[0]].shape;
 
-            let object = {
+            const object = {
                 label_id: label,
                 group: 0,
                 frame: sortedFrames[0],
@@ -99,27 +97,25 @@ class ShapeMergerModel extends Listener {
                 shapes: [],
             };
 
-            let lastMutableAttr = {};
-            let attributes = shapeDict[sortedFrames[0]].interpolation.attributes;
-            for (let attrId in attributes) {
+            const lastMutableAttr = {};
+            const { attributes } = shapeDict[sortedFrames[0]].interpolation;
+            for (const attrId in attributes) {
                 if (!window.cvat.labelsInfo.attrInfo(attrId).mutable) {
                     object.attributes.push({
                         id: attrId,
                         value: attributes[attrId].value,
                     });
-                }
-                else {
+                } else {
                     lastMutableAttr[attrId] = null;
                 }
             }
 
-            for (let frame of sortedFrames) {
-
+            for (const frame of sortedFrames) {
                 // Not save continiously attributes. Only updates.
-                let shapeAttributes = [];
+                const shapeAttributes = [];
                 if (shapeDict[frame].shape.label === label) {
-                    let attributes = shapeDict[frame].interpolation.attributes;
-                    for (let attrId in attributes) {
+                    const { attributes } = shapeDict[frame].interpolation;
+                    for (const attrId in attributes) {
                         if (window.cvat.labelsInfo.attrInfo(attrId).mutable) {
                             if (attributes[attrId].value != lastMutableAttr[attrId]) {
                                 lastMutableAttr[attrId] = attributes[attrId].value;
@@ -135,18 +131,17 @@ class ShapeMergerModel extends Listener {
                 object.shapes.push(
                     Object.assign(shapeDict[frame].interpolation.position,
                         {
-                            frame: frame,
-                            attributes: shapeAttributes
-                        }
-                    )
+                            frame,
+                            attributes: shapeAttributes,
+                        }),
                 );
 
                 // push an outsided box after each annotation box if next frame is empty
-                let nextFrame = frame + 1;
-                let stopFrame = window.cvat.player.frames.stop;
-                let type = shapeDict[frame].shape.type;
+                const nextFrame = frame + 1;
+                const stopFrame = window.cvat.player.frames.stop;
+                const { type } = shapeDict[frame].shape;
                 if (type.startsWith('annotation_') && !(nextFrame in shapeDict) && nextFrame <= stopFrame) {
-                    let copy = Object.assign({}, object.shapes[object.shapes.length - 1]);
+                    const copy = Object.assign({}, object.shapes[object.shapes.length - 1]);
                     copy.outside = true;
                     copy.frame += 1;
                     copy.z_order = 0;
@@ -162,20 +157,20 @@ class ShapeMergerModel extends Listener {
             this._collectionModel.add(object, `interpolation_${this._shapeType}`);
             this._collectionModel.update();
 
-            let model = this._collectionModel.shapes.slice(-1)[0];
-            let shapes = this._shapesForMerge;
+            const model = this._collectionModel.shapes.slice(-1)[0];
+            const shapes = this._shapesForMerge;
 
             // Undo/redo code
             window.cvat.addAction('Merge Objects', () => {
                 model.unsubscribe(this._collectionModel);
                 model.removed = true;
-                for (let shape of shapes) {
+                for (const shape of shapes) {
                     shape.removed = false;
                     shape.subscribe(this._collectionModel);
                 }
                 this._collectionModel.update();
             }, () => {
-                for (let shape of shapes) {
+                for (const shape of shapes) {
                     shape.removed = true;
                     shape.unsubscribe(this._collectionModel);
                 }
@@ -185,12 +180,11 @@ class ShapeMergerModel extends Listener {
             // End of undo/redo code
 
             this.cancel();
-            for (let shape of shapes) {
+            for (const shape of shapes) {
                 shape.removed = true;
                 shape.unsubscribe(this._collectionModel);
             }
-        }
-        else {
+        } else {
             this.cancel();
         }
     }
@@ -200,7 +194,7 @@ class ShapeMergerModel extends Listener {
             window.cvat.mode = null;
             this._mergeMode = false;
 
-            for (let shape of this._shapesForMerge) {
+            for (const shape of this._shapesForMerge) {
                 shape.merge = false;
             }
             this._shapesForMerge = [];
@@ -232,21 +226,20 @@ class ShapeMergerController {
 
         setupMergeShortkeys.call(this);
         function setupMergeShortkeys() {
-            let shortkeys = window.cvat.config.shortkeys;
+            const { shortkeys } = window.cvat.config;
 
-            let switchMergeHandler = Logger.shortkeyLogDecorator(function() {
+            const switchMergeHandler = Logger.shortkeyLogDecorator(() => {
                 this.switch();
-            }.bind(this));
+            });
 
-            Mousetrap.bind(shortkeys["switch_merge_mode"].value, switchMergeHandler.bind(this), 'keydown');
+            Mousetrap.bind(shortkeys.switch_merge_mode.value, switchMergeHandler.bind(this), 'keydown');
         }
     }
 
     switch() {
         if (this._model.mergeMode) {
             this._model.done();
-        }
-        else {
+        } else {
             this._model.start();
         }
     }
@@ -263,9 +256,9 @@ class ShapeMergerView {
         this._mergeButton = $('#mergeTracksButton');
         this._mergeButton.on('click', () => controller.switch());
 
-        let shortkeys = window.cvat.config.shortkeys;
+        const { shortkeys } = window.cvat.config;
         this._mergeButton.attr('title', `
-            ${shortkeys['switch_merge_mode'].view_value} - ${shortkeys['switch_merge_mode'].description}`);
+            ${shortkeys.switch_merge_mode.view_value} - ${shortkeys.switch_merge_mode.description}`);
 
         model.subscribe(this);
     }
@@ -276,8 +269,7 @@ class ShapeMergerView {
             this._frameContent.on('click.merger', () => {
                 this._controller.click();
             });
-        }
-        else {
+        } else {
             this._frameContent.off('click.merger');
             this._mergeButton.text('Merge Shapes');
         }

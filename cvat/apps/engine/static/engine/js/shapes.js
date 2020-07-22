@@ -475,21 +475,28 @@ class ShapeModel extends Listener {
 
     /**
      * Remove model.
+     * Model is "removed" by simply setting its remove attribute,
+     * as model are committed when user saves annotation.
+     *
+     * @param {?boolean} disableUndoRedo Disable undo/redo, as splitting
+     *                                   has its own undo/redo code.
      */
-    remove() {
+    remove(disableUndoRedo = false) {
         Logger.addEvent(Logger.EventType.deleteObject, { count: 1 });
 
         // Also notify subscribers.
         this.removed = true;
 
-        // Undo/redo code
-        window.cvat.addAction(
-            'Remove Object',
-            () => { this.removed = false; },
-            () => { this.removed = true; },
-            window.cvat.player.frames.current,
-        );
-        // End of undo/redo code
+        if (!disableUndoRedo) {
+            // Undo/redo code
+            window.cvat.addAction(
+                'Remove Object',
+                () => { this.removed = false; },
+                () => { this.removed = true; },
+                window.cvat.player.frames.current,
+            );
+            // End of undo/redo code
+        }
     }
 
     /**
@@ -3230,10 +3237,8 @@ class PointsView extends PolyShapeView {
     }
 }
 
-/**
- * Wtf
- */
 function buildShapeModel(data, type, clientID, color) {
+    // Note switch fall through.
     switch (type) {
     case 'interpolation_box':
     case 'annotation_box':

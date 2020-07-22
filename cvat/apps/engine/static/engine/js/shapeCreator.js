@@ -40,8 +40,10 @@ class ShapeCreatorModel extends Listener {
      * Finish drawing and add shape.
      *
      * @param {*} result The shape to be added.
+     * @param {?boolean} disableUndoRedo Disable undo/redo, as splitting
+     *                                   has its own undo/redo code.
      */
-    finish(result) {
+    finish(result, disableUndoRedo = false) {
         const data = {};
         const frame = window.cvat.player.frames.current;
 
@@ -75,24 +77,26 @@ class ShapeCreatorModel extends Listener {
 
         const model = this._shapeCollection.shapes.slice(-1)[0];
 
-        // Undo/redo code
-        window.cvat.addAction(
-            // name
-            'Draw Object',
-            // undo
-            () => {
-                model.removed = true;
-                model.unsubscribe(this._shapeCollection);
-            },
-            // redo
-            () => {
-                model.subscribe(this._shapeCollection);
-                model.removed = false;
-            },
-            // frame
-            window.cvat.player.frames.current,
-        );
-        // End of undo/redo code
+        if (!disableUndoRedo) {
+            // Undo/redo code
+            window.cvat.addAction(
+                // name
+                'Draw Object',
+                // undo
+                () => {
+                    model.removed = true;
+                    model.unsubscribe(this._shapeCollection);
+                },
+                // redo
+                () => {
+                    model.subscribe(this._shapeCollection);
+                    model.removed = false;
+                },
+                // frame
+                window.cvat.player.frames.current,
+            );
+            // End of undo/redo code
+        }
 
         this._shapeCollection.update();
     }
@@ -198,8 +202,19 @@ class ShapeCreatorController {
         this._model.defaultLabel = labelId;
     }
 
-    finish(result) {
-        this._model.finish(result);
+    /**
+     * Finish drawing and add shape.
+     *
+     * @param {*} result The shape to be added.
+     * @param {?boolean} disableUndoRedo Disable undo/redo, as splitting
+     *                                   has its own undo/redo code.
+     */
+    finish(result, disableUndoRedo) {
+        // There're cases that finish() is called
+        // with a second argument, which could be
+        // mistakenly passed as disableUndoRedo.
+        // So it's better to check type.
+        this._model.finish(result, disableUndoRedo === true);
     }
 
     get currentShapes() {

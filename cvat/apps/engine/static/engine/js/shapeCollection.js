@@ -402,6 +402,7 @@ class ShapeCollectionModel extends Listener {
      *                   {add_mode}_{shape_type}
      *                 add_mode could be interpolation or annotation
      *                 shape_type could be box, polygon,...
+     * @returns {ShapeModel} The added shape model.
      */
     add(data, type) {
         this._idx += 1;
@@ -1103,9 +1104,12 @@ class ShapeCollectionController {
     /**
      * Given the number of row and column,
      * split the box accordingly.
+     * This function first removes the box,
+     * then adds child boxes, using existing function.
+     * The undo/redo is handled here.
      *
-     * @param row {number} Number of row to split. 1 if don't split row.
-     * @param col {number} Number of column to split. 1 if don't split column.
+     * @param row {number} Number of row. 1 if don't split row.
+     * @param col {number} Number of column. 1 if don't split column.
      */
     splitActiveBox(row, col) {
         if (row === 1 && col === 1) {
@@ -1120,15 +1124,20 @@ class ShapeCollectionController {
         const { activeShape } = this._model;
 
         // First remove the active box.
-        // Before removing, some attributes in activeShape must be backup.
+        // Before removing, needed attributes in activeShape
+        // must be backup, otherwise activeShape would be null.
         const {
             xtl, ytl, xbr, ybr, occluded, z_order,
         } = activeShape._positions[0];
         const { frame } = activeShape;
         const group = activeShape.groupId;
         const label_id = activeShape.label;
+        const parentID = activeShape.id;
 
-        this.removeActiveShape({ shiftKey: true });    // TODO: Check Shift and lock.
+        this.removeActiveShape(
+            { shiftKey: true },    // TODO: Check Shift and lock.
+            true,                  // No undo/redo.
+        );
 
         const width = xbr - xtl;
         const childBoxWidth = (width - SPACING * (col - 1)) / col;
@@ -1136,10 +1145,12 @@ class ShapeCollectionController {
         const childBoxHeight = (height - SPACING * (row - 1)) / row;
 
         if (childBoxWidth * childBoxHeight < AREA_TRESHOLD) {
+            showMessage('The area of the child boxes are too small.');
             return;
         }
 
-        // Then add splitted box.
+        // Then add child box.
+        const children = [];
         for (let i = 0; i < row; ++i) {
             for (let j = 0; j < col; ++j) {
                 const c_xtl = xtl + j * (childBoxWidth + SPACING);
@@ -1147,7 +1158,7 @@ class ShapeCollectionController {
                 const c_ytl = ytl + i * (childBoxHeight + SPACING);
                 const c_ybr = c_ytl + childBoxHeight;
 
-                this._model.add(
+                const child = this._model.add(
                     {
                         attributes: [],
                         frame,
@@ -1163,19 +1174,66 @@ class ShapeCollectionController {
                     },
                     'annotation_box',
                 );
+                children.push(child);
             }
         }
+
+        // Find the removed parent box
+        // Remind: "Remove" a shape just by setting removed attribute of the shape
+        let parent;
+        for (const shape in this._model._annotationShapes[frame]) {
+            if (shape.id === parentID) {
+                parent = shape;
+                break;
+            }
+        }
+
+        // Undo/redo
+        // Undo/redo add: ShapeCreatorModel::finish().
+        // Undo/redo remove: ShapeModel::remove().
+        window.cvat.addAction(
+            'Split box',
+            () => {
+                // Undo create
+                for (const child of children) {
+                    child.removed = true;
+                    child.unsubscribe(this._model);
+                }
+
+                // Undo remove
+                parent.removed = false;
+
+                // TODO: check if update() is needed in undo/redo.
+                // this._model.update();
+            },
+            () => {
+                for (const child in children) {
+                    child.removed = false;
+                    child.subscribe(this._model);
+                }
+
+                parent.removed = true;
+            },
+            frame,
+        );
 
         // Update model, which triggers rendering.
         this._model.update();
     }
 
-    removeActiveShape(e) {
+    /**
+     * Remove currently active shape.
+     *
+     * @param {*} e
+     * @param {?boolean} disableUndoRedo Disable undo/redo, as splitting
+     *                                   has its own undo/redo code.
+     */
+    removeActiveShape(e, disableUndoRedo = false) {
         if (window.cvat.mode === null) {
             this._model.selectShape(this._model.lastPosition, false);
             const { activeShape } = this._model;
             if (activeShape && (!activeShape.lock || e && e.shiftKey)) {
-                activeShape.remove();
+                activeShape.remove(disableUndoRedo);
             }
         }
     }
@@ -1587,16 +1645,22 @@ class ShapeCollectionView {
                 messageText.text('Set the number of row to split:');
                 colInput.hide();
             }
+            rowInput.on('click', e => $(e).select());
+            colInput.on('click', e => $(e).select());
 
             $('body').append(messageWindow);
 
-            // Restore original state: inputs shown, errors hidden.
-            messageWindow.on('remove', () => {
-                rowInput.show();
-                colInput.show();
-                messageWindow.find('span > p').hide();
-                messageWindow.off('remove');
-            });
+            // Restore original state upon removal: inputs shown, errors hidden.
+            // messageWindow.on('remove', () => {
+            //     rowInput.show();
+            //     colInput.show();
+            //     messageWindow.find('span > p').hide();
+            //     messageWindow.off('remove');
+            // });
+
+            // Prevent bubbling of keyboard event, so that tabbing
+            // between element is possible.
+            messageWindow.on('keydown', e => e.stopPropagation());
 
             const okButton = messageWindow.find('.templateOKButton');
             okButton.on('click', () => {
@@ -1608,10 +1672,10 @@ class ShapeCollectionView {
                     .each((_, el) => {
                         el = $(el);
                         const val = parseInt(el.val(), 10);
+
                         if (!val || val < 1 || val > 20) {
                             error = true;
                             el.next().show();
-                            return false;    // Break each() early.
                         }
 
                         const isRowInput = el.attr('name') === 'row';
@@ -1625,10 +1689,13 @@ class ShapeCollectionView {
                     if (onOK) onOK(row, col);
                 }
             });
-            okButton.focus();
 
             const cancelButton = messageWindow.find('.templateCancelButton');
             cancelButton.on('click', () => messageWindow.remove());
+
+            // Focus at the first input field
+            // messageWindow.find('.modal-content input').first().select();
+            setTimeout(() => messageWindow.find('.modal-content input').first().select());
         }
     }
 
