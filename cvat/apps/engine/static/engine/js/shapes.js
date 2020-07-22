@@ -475,11 +475,14 @@ class ShapeModel extends Listener {
 
     /**
      * Remove model.
-     * Model is "removed" by simply setting its remove attribute,
-     * as model are committed when user saves annotation.
+     * Model is "removed" by setting the removed attribute.
+     * disableUndoRedo is true only in the case of splitting box.
+     * In that case, the removed model (a BoxModel) is also returned,
+     * so that undo and redo is possible.
      *
      * @param {?boolean} disableUndoRedo Disable undo/redo, as splitting
      *                                   has its own undo/redo code.
+     * @returns {?BoxModel} Returns the deleted model if disableUndoRedo is true.
      */
     remove(disableUndoRedo = false) {
         Logger.addEvent(Logger.EventType.deleteObject, { count: 1 });
@@ -491,11 +494,17 @@ class ShapeModel extends Listener {
             // Undo/redo code
             window.cvat.addAction(
                 'Remove Object',
-                () => { this.removed = false; },
-                () => { this.removed = true; },
+                () => {
+                    this.removed = false;
+                },
+                () => {
+                    this.removed = true;
+                },
                 window.cvat.player.frames.current,
             );
             // End of undo/redo code
+        } else {
+            return this;
         }
     }
 
@@ -1684,6 +1693,13 @@ class ShapeView extends Listener {
                 } else {
                     resetPerpectiveItem.addClass('hidden');
                     switchOrientationItem.addClass('hidden');
+                }
+
+                const splitBoxItem = this._shapeContextMenu.find('li[action^="split_"]');
+                if (type[1] === 'box') {
+                    splitBoxItem.show();
+                } else {
+                    splitBoxItem.hide();
                 }
 
                 this._shapeContextMenu.finish().show(100);

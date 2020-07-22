@@ -28,7 +28,9 @@ on('drawstop') -> ShapeCreatorController::finish() -> ShapeCreatorModel::finish(
 
 ### 2.2. Removing shape
 
-Removing a shape is as simple as setting the `removed` attribute of the shape. This is required, as the UI supports undo/redo. When the user presses <kbd>Del</kbd>, the following chain is called:
+Removing a shape is as simple as setting the `removed` attribute of the shape. The actual removal happens after a chain of callbacks, though the removed model can be retained in a unknown manner.
+
+When the user presses <kbd>Del</kbd>, the following chain is called:
 
 ```text
 ShapeCollectionController::removeActiveShape() -> ShapeModel::remove() -> ShapeCollectionModel::onShapeUpdate() -> BoxView::onShapeUpdate() ->

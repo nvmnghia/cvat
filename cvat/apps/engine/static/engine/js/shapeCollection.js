@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 /* eslint-disable no-multi-spaces */
 /* eslint-disable guard-for-in */
 /* eslint-disable no-use-before-define */
@@ -1132,9 +1133,8 @@ class ShapeCollectionController {
         const { frame } = activeShape;
         const group = activeShape.groupId;
         const label_id = activeShape.label;
-        const parentID = activeShape.id;
 
-        this.removeActiveShape(
+        const parent = this.removeActiveShape(
             { shiftKey: true },    // TODO: Check Shift and lock.
             true,                  // No undo/redo.
         );
@@ -1175,16 +1175,6 @@ class ShapeCollectionController {
                     'annotation_box',
                 );
                 children.push(child);
-            }
-        }
-
-        // Find the removed parent box
-        // Remind: "Remove" a shape just by setting removed attribute of the shape
-        let parent;
-        for (const shape in this._model._annotationShapes[frame]) {
-            if (shape.id === parentID) {
-                parent = shape;
-                break;
             }
         }
 
@@ -1233,7 +1223,11 @@ class ShapeCollectionController {
             this._model.selectShape(this._model.lastPosition, false);
             const { activeShape } = this._model;
             if (activeShape && (!activeShape.lock || e && e.shiftKey)) {
-                activeShape.remove(disableUndoRedo);
+                const removedItem = activeShape.remove(disableUndoRedo);
+
+                if (disableUndoRedo) {
+                    return removedItem;
+                }
             }
         }
     }
