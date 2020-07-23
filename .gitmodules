@@ -1,0 +1,3 @@
+[submodule "CRAFT-pytorch"]
+	path = CRAFT-pytorch
+	url = git@github.com:clovaai/CRAFT-pytorch.git
