@@ -41,12 +41,18 @@ class ShapeCollectionModel extends Listener {
     constructor() {
         super('onCollectionUpdate', () => this);
 
-        // List of frame's shapes.
+        // Dict of frame's shapes, keyed with frame number.
         // It can't be an array, as array has to be continuous.
+        /** @type {Object.<number, ShapeModel>} */
         this._annotationShapes = {};
+
         this._groups = {};
         this._interpolationShapes = [];
+
+        // List of all shapes.
+        /** @type {ShapeModel[]} */
         this._shapes = [];
+
         this._showAllInterpolation = false;
         this._currentShapes = [];
         this._idx = 0;
@@ -83,6 +89,9 @@ class ShapeCollectionModel extends Listener {
         return ++this._groupIdx;
     }
 
+    /**
+     * Randomize color.
+     */
     nextColor() {
         // Step used for more color variability
         const idx = ++this._colorIdx % this._colors.length;
@@ -94,6 +103,13 @@ class ShapeCollectionModel extends Listener {
         };
     }
 
+    /**
+     * Compute all shapes' position, including interpolated shapes.
+     * The returned array is assigned to this._currentShapes.
+     *
+     * @param {number} frame Frame number.
+     * @returns {{model: ShapeModel, interpolation: ShapeInFrame}}
+     */
     _computeInterpolation(frame) {
         const interpolated = [];
         for (const shape of (this._annotationShapes[frame] || []).concat(this._interpolationShapes)) {
@@ -236,6 +252,9 @@ class ShapeCollectionModel extends Listener {
      * @param {*} data Data of all shapes in this job.
      */
     import(data) {
+        /**
+         * Convert from server shape object to client shape object in place.
+         */
         function _convertShape(shape) {
             if (shape.type === 'rectangle') {
                 Object.assign(shape, window.cvat.translate.box.serverToClient(shape));
@@ -398,17 +417,18 @@ class ShapeCollectionModel extends Listener {
     /**
      * Adding a shape (pressing N in CVAT).
      *
-     * @param {*} data Shape data, including coordinates.
-     * @param {*} type Shape type string, of the following format:
-     *                   {add_mode}_{shape_type}
-     *                 add_mode could be interpolation or annotation
-     *                 shape_type could be box, polygon,...
+     * @param {Object} data  Shape data, including coordinates.
+     * @param {string} type  Shape type string, of the following format:
+     *                         {annotation_mode}_{shape_type}
+     *                       add_mode could be interpolation or annotation
+     *                       shape_type could be box, polygon,...
      * @returns {ShapeModel} The added shape model.
      */
     add(data, type) {
         this._idx += 1;
         const id = this._idx;
         const model = buildShapeModel(data, type, id, this.nextColor());
+
         if (type.startsWith('interpolation')) {
             this._interpolationShapes.push(model);
         } else {
@@ -1568,7 +1588,8 @@ class ShapeCollectionView {
             }.bind(this, hiddenButton, +labelId);
 
             const buttonBlock = $('<center> </center>')
-                .append(lockButton).append(hiddenButton)
+                .append(lockButton)
+                .append(hiddenButton)
                 .addClass('buttonBlockOfLabelUI');
 
             const title = $(`<label> ${labels[labelId]} </label>`);
@@ -1619,8 +1640,8 @@ class ShapeCollectionView {
         /**
          * Ask user the number of row and column to split.
          *
-         * @param {boolean} splitIntoRow Number of row. false if only split into columns.
-         * @param {boolean} splitIntoCol Number of column. false if only split into rows.
+         * @param {boolean} splitIntoRow                          Split into row or not.
+         * @param {boolean} splitIntoCol                          Split into column or not.
          * @param {ShapeCollectionController~splitActiveBox} onOK Callback to split box.
          */
         function dialogSplitBox(splitIntoRow, splitIntoCol, onOK) {
@@ -1630,7 +1651,10 @@ class ShapeCollectionView {
             const messageText = messageWindow.find('.templateMessage');
             const rowInput = messageWindow.find('span.row-input');
             const colInput = messageWindow.find('span.col-input');
-            if (splitIntoRow && splitIntoCol) {
+
+            if (!splitIntoRow && !splitIntoCol) {
+                throw Error('Unreachable code was reached.');
+            } else if (splitIntoRow && splitIntoCol) {
                 messageText.text('Set the number of row and column to split:');
             } else if (!splitIntoRow) {    // row and col can't both be false.
                 messageText.text('Set the number of column to split:');
@@ -1689,6 +1713,7 @@ class ShapeCollectionView {
 
             // Focus at the first input field
             // messageWindow.find('.modal-content input').first().select();
+            // Why setTimeout()?
             setTimeout(() => messageWindow.find('.modal-content input').first().select());
         }
     }
@@ -1708,9 +1733,16 @@ class ShapeCollectionView {
         }
     }
 
+    /**
+     * Update collection. This object subscribes to a ShapeCollectionModel, which call this function to notify this object.
+     * The ShapeCollectionModel (the publisher) is modified here. The _frameContent and _UIContent is detached, but not deleted,
+     * so subsequent calls can continue to update it and finally attach (append()) it when appropriate.
+     *
+     * @param {ShapeCollectionModel} collection Current ShapeCollectionModel.
+     */
     onCollectionUpdate(collection) {
         // Save parents and detach elements from DOM
-        // in order to increase performance in the buildShapeView function
+        // in order to increase performance in the buildShapeView function (ol' trick of drawing on hidden element to avoid reflow)
         const parents = {
             uis: this._UIContent.parent(),
             shapes: this._frameContent.node.parentNode,
@@ -1754,7 +1786,7 @@ class ShapeCollectionView {
             }
         }
 
-        // Now we need draw new models which aren't on previous collection
+        // Now we need draw new models which aren't on previous collection. At this point, all shapes are loaded.
         for (let newIdx = 0; newIdx < newModels.length; newIdx++) {
             if (!this._currentModels.includes(newModels[newIdx])) {
                 drawView.call(this, newShapes[newIdx], newModels[newIdx]);
@@ -1762,7 +1794,7 @@ class ShapeCollectionView {
         }
 
         if (frameChanged) {
-            parents.shapes.append(this._frameContent.node);
+            parents.shapes.append(this._frameContent.node);    // After drawing, reattach.
             parents.uis.prepend(this._UIContent);
         }
 
@@ -1770,6 +1802,13 @@ class ShapeCollectionView {
         this._frameMarker = window.cvat.player.frames.current;
         this._updateLabelUIs();
 
+        /**
+         * Draw view, and add it to the list of views.
+         * Why does model has to be passed when it is already bundled in shape/
+         *
+         * @param {{model: ShapeModel, interpolation: ShapeInFrame}} shape Calculated shape information, ready to draw.
+         * @param {ShapeModel} model Shape model (the same as shape.model?).
+         */
         function drawView(shape, model) {
             const view = buildShapeView(model, buildShapeController(model), this._frameContent, this._UIContent, this._textContent);
             view.draw(shape.interpolation);
@@ -1797,6 +1836,7 @@ class ShapeCollectionView {
         const scaledR = POINT_RADIUS / this._scale;
         const scaledStroke = STROKE_WIDTH / this._scale;
         const scaledPointStroke = SELECT_POINT_STROKE_WIDTH / this._scale;
+
         $('.svg_select_points').each(function () {
             this.instance.radius(scaledR, scaledR);
             this.instance.attr('stroke-width', scaledPointStroke);

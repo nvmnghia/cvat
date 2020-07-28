@@ -7,6 +7,11 @@
 /* exported LabelsInfo */
 
 class LabelsInfo {
+    /**
+     * Create a list of labels.
+     *
+     * @param {Label[]} labels Input list of labels
+     */
     constructor(labels) {
         function convertAttribute(attribute) {
             return {
@@ -18,6 +23,7 @@ class LabelsInfo {
             };
         }
 
+        // Dict of labels, keys are their IDs.
         this._labels = {};
         this._attributes = {};
         this._colorIdxs = {};
@@ -63,6 +69,14 @@ class LabelsInfo {
     }
 
 
+    /**
+     * Given the label ID, return its attributes in the form of a dict.
+     * The key of the dict is the attribute ID, the value is attribute name.
+     * // TODO: check if the JSDoc is ok with this one.
+     *
+     * @param {number} labelId ID of the label.
+     * @returns {Object.<number, string>} Mapping from attribute ID to attribute names.
+     */
     labelAttributes(labelId) {
         if (labelId in this._labels) {
             const attributes = {};
@@ -89,6 +103,12 @@ class LabelsInfo {
     }
 
 
+    /**
+     * Given the attribute ID, return its information.
+     *
+     * @param {number} attrId ID of the attributes.
+     * @return {*} The same structure as the object returned by convertAttribute().
+     */
     attrInfo(attrId) {
         if (attrId in this._attributes) {
             return JSON.parse(JSON.stringify(this._attributes[attrId]));

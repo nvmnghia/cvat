@@ -16,6 +16,18 @@ shapeCreatorModel.subscribe(shapeCollectionModel);
 
 which means that when `shapeCollectionModel` calls `notify()`, that `shapeCollectionModel` is passed to `onShapeCreatorUpdate()` of `shapeCreatorModel`.
 
+Shapes in an interpolated series are treated as one shape, and the position is calculated when needed, using `ShapeModel::interpolate()` and related methods.
+
+Note that the `A.subscribe(B)` in the source code stands for `A adds B as a listener`, or shorter `B subscribes A`. The choice of name is crazy.
+
+The below text illustrates chain of subscribers. `Model`s subscribe to their `View` is not illustrated. The notation `A --func()--> B` means `A subscribes B`, or `B.subscribe(A)`, and `A` notifies `B` by calling `B.func()`.
+
+```
+ShapeCollectionView --onCollectionUpdate--> ShapeCollectionModel --onShapeUpdate--> ShapeModel
+                    \                                                             /
+                     \---onShapeViewUpdate---> ShapeView -----onShapeUpdate------/
+```
+
 ## 2. Use case
 
 ### 2.1. Adding shape

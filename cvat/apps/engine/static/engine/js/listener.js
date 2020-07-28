@@ -18,12 +18,13 @@ class Listener {
     /**
      * Listener (subscriber) interface, doubles as publisher.
      *
-     * @param {*} notifyCallbackName Name of a function that all subscribers
-     *                               have to implement. When notify() is called,
-     *                               subscribers are notified by calling their
-     *                               implementations of notifyCallbackName.
-     * @param {*} getStateCallback   Get state. The state returned will be
-     *                               passed to the subscribers.
+     * @callback getState
+     * @param {string} notifyCallbackName Name of a function that all subscribers
+     *                                    have to implement. When notify() is called,
+     *                                    subscribers are notified by calling their
+     *                                    implementations of notifyCallbackName.
+     * @param {getState} getStateCallback Get state. The state returned will be
+     *                                    passed to the subscribers.
      */
     constructor(notifyCallbackName, getStateCallback) {
         this._listeners = [];
@@ -31,6 +32,12 @@ class Listener {
         this._getStateCallback = getStateCallback;
     }
 
+    /**
+     * Add a listener/subscriber.
+     * What a stupid choice of name.
+     *
+     * @param {Listener} listener A listener/subscriber.
+     */
     subscribe(listener) {
         if (typeof (listener) !== 'object') {
             throw Error('Bad listener for subscribe found. Listener is not object.');
@@ -49,6 +56,12 @@ class Listener {
         this._listeners = [];
     }
 
+    /**
+     * Remove a listener/subscriber.
+     * Again, this whole class is a joke.
+     *
+     * @param {Listener} listener A listener/subscriber.
+     */
     unsubscribe(listener) {
         const idx = this._listeners.indexOf(listener);
         if (idx != -1) {

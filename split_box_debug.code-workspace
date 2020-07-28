@@ -4,10 +4,5 @@
 			"path": "."
 		}
 	],
-	"settings": {
-		"cSpell.words": [
-			"copypasta",
-			"onreject"
-		]
-	}
+	"settings": {}
 }

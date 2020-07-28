@@ -1,3 +1,4 @@
+/* eslint-disable no-multi-spaces */
 /* eslint-disable no-console */
 /* eslint-disable prefer-destructuring */
 /* eslint-disable no-underscore-dangle */
@@ -40,20 +41,82 @@ const POINT_RADIUS = 5;
 const AREA_TRESHOLD = 9;
 const TEXT_MARGIN = 10;
 
+/** ****************************** JSDOC OBJECT  ******************************* */
+
+/**
+ * Simple pair of attribute name and value.
+ *
+ * @typedef {Object} SimpleAttribute
+ * @property {string} name Name of the attribute.
+ * @property {(string|number|boolean)} value Value of the attribute.
+ */
+
+// /** @typedef {{attributes: SimpleAttribute, position: Object}} ShapeInFrame */
+/**
+ * Shape information in a particular frame.
+ *
+ * @typedef {Object} ShapeInFrame
+ * @property {SimpleAttribute} attributes Attributes of the shape.
+ * @property {Object} position Position of the shape. More precisely,
+ *                             it is a ShapePosition if the shape is a box.
+ */
+
+/**
+ * Position of the box, along with some metadata for rendering.
+ *
+ * @typedef ShapePosition
+ * @type {object}
+ * @property {number} xtl
+ * @property {number} ytl
+ * @property {number} xbr
+ * @property {number} ybr
+ * @property {boolean} occluded
+ * @property {boolean} outside Is the shape outside the view?
+ * @property {number} z_order
+ */
+
 /** ****************************** SHAPE MODELS  ******************************* */
 
 class ShapeModel extends Listener {
+    /**
+     * Construct a ShapeModel.
+     * This is the base model for all other shapes.
+     * It only defines common properties, attributes,...
+     * Position data will be handled by children constructors.
+     *
+     * @param {Object} data        Raw shape data.
+     * @param {Object[]} positions Raw shape position data. In Annotation mode, positions is [].
+     * @param {string} type        Shape type string, of the following format:
+     *                               {annotation_mode}_{shape_type}
+     * @param {number} clientID    Client-side shape ID?
+     * @param {string} color       Color code.
+     */
     constructor(data, positions, type, clientID, color) {
         super('onShapeUpdate', () => this);
+
         this._serverID = data.id;
         this._id = clientID;
+
+        // _groupId = 0: no group
         this._groupId = data.group || 0;
+
+        // Annotation type: {annotation_mode}_{shape_type}
+        // add_mode could be interpolation or annotation
+        // shape_type could be box, polygon,...
+        /** @type {string} */
         this._type = type;
-        this._color = color;
+
+        // ID of the label
         this._label = data.label_id;
-        this._frame = type.split('_')[0] === 'annotation' ? data.frame
+
+        this._color = color;
+
+        this._frame = type.split('_')[0] === 'annotation'
+            ? data.frame
             : positions.filter((pos) => pos.frame < window.cvat.player.frames.start).length
-                ? window.cvat.player.frames.start : Math.min(...positions.map((pos) => pos.frame));
+                ? window.cvat.player.frames.start
+                : Math.min(...positions.map((pos) => pos.frame));
+
         this._removed = false;
         this._locked = false;
         this._merging = false;
@@ -68,20 +131,33 @@ class ShapeModel extends Listener {
         this._importAttributes(data.attributes, positions);
     }
 
+    /**
+     * Import attributes from raw data.
+     * This function populates this._attributes.
+     * Note that this is about attribute, not label.
+     *
+     * @typedef {{id: number, value: string}} AttributeValue
+     * @param {AttributeValue[]} attributes Attribute id and value.
+     * @param {Object[]} positions
+     */
     _importAttributes(attributes, positions) {
-        const converted = {};
+        // Convert attributes to a dictionary.
+        // Key is attribute ID, value is attribute value.
+        const tmp = {};
         for (const attr of attributes) {
-            converted[attr.id] = attr.value;
+            tmp[attr.id] = attr.value;
         }
-        attributes = converted;
+        attributes = tmp;
 
         this._attributes = {
-            immutable: {},
-            mutable: {},
+            immutable: {},    // Nested dict. First key is frame number, second key is attribute ID, value is attribute value.
+            mutable: {},      // Key is attribute ID, value is attribute value. Mutable = change between frames.
         };
 
         const { labelsInfo } = window.cvat;
         const labelAttributes = labelsInfo.labelAttributes(this._label);
+
+        // Fill this._attributes with default values.
         for (const attrId in labelAttributes) {
             const attrInfo = labelsInfo.attrInfo(attrId);
             if (attrInfo.mutable) {
@@ -92,6 +168,7 @@ class ShapeModel extends Listener {
             }
         }
 
+        // Fill this._attributes with values from attributes.
         for (const attrId in attributes) {
             const attrInfo = labelsInfo.attrInfo(attrId);
             const labelValue = LabelsInfo.normalize(attrInfo.type, attributes[attrId]);
@@ -102,6 +179,7 @@ class ShapeModel extends Listener {
             }
         }
 
+        // Fill this._attributes with values for each position.
         for (const pos of positions) {
             for (const attr of pos.attributes) {
                 const attrInfo = labelsInfo.attrInfo(attr.id);
@@ -114,9 +192,18 @@ class ShapeModel extends Listener {
         }
     }
 
+    /**
+     * Given the frame number, return the attributes of the shape in that frame.
+     * The returned object is a dict. The key is the attribute ID, the value is
+     * an object containing attribute name and value.
+     *
+     * @param {number} frame Frame number.
+     * @returns {Object.<number, SimpleAttribute>} Dict of SimpleAttribute keyed with attribute ID.
+     */
     _interpolateAttributes(frame) {
         const { labelsInfo } = window.cvat;
         const interpolated = {};
+
         for (const attrId in this._attributes.immutable) {
             const attrInfo = labelsInfo.attrInfo(attrId);
             interpolated[attrId] = {
@@ -129,6 +216,7 @@ class ShapeModel extends Listener {
             return interpolated;
         }
 
+        // Prepare a dict of attribute ID-name, for faster lookup in the next loop.
         const mutableAttributes = {};
         for (const attrId in window.cvat.labelsInfo.labelAttributes(this._label)) {
             const attrInfo = window.cvat.labelsInfo.attrInfo(attrId);
@@ -137,11 +225,20 @@ class ShapeModel extends Listener {
             }
         }
 
+        // Add attributes
         for (const attrId in mutableAttributes) {
             for (let frameKey in this._attributes.mutable) {
                 frameKey = +frameKey;
-                if (attrId in this._attributes.mutable[frameKey]
-                    && (frameKey <= frame || !(attrId in interpolated))) {
+
+                // Reasonable explanation for the 2nd operand of &&:
+                // It relies on ES6 ascending iteration order for numeral key.
+                // https://stackoverflow.com/a/5525820/5959593
+                // As this loop iterates in ascending order, the later
+                // frameKey will override the earlier, so that interpolated[attrId]
+                // will have the value of the nearest frameKey not after frame.
+                if (attrId in this._attributes.mutable[frameKey]    // Isn't it always true???
+                    && (frameKey <= frame                           // If the frame is after frameKey, update interpolated[attrID]
+                        || !(attrId in interpolated))) {            // else only update if it's not there???
                     interpolated[attrId] = {
                         name: mutableAttributes[attrId],
                         value: this._attributes.mutable[frameKey][attrId],
@@ -149,7 +246,7 @@ class ShapeModel extends Listener {
                 }
             }
 
-            if (!(attrId != interpolated)) {
+            if (!(attrId != interpolated)) {    // WTF???
                 throw Error(`Keyframe for mutable attribute not found. Frame: ${frame}, attributeId: ${attrId}`);
             }
         }
@@ -222,6 +319,10 @@ class ShapeModel extends Listener {
     }
 
     notify(updateReason) {
+        if (updateReason !== 'activation') {
+            // eslint-disable-next-line no-unused-vars
+            const what = 1;
+        }
         const oldReason = this._updateReason;
         this._updateReason = updateReason;
         try {
@@ -259,19 +360,27 @@ class ShapeModel extends Listener {
         });
 
         // Undo/redo code
-        const oldAttr = attrInfo.mutable ? this._attributes.mutable[frame] ? this._attributes.mutable[frame][attrId] : undefined
+        const oldAttr = attrInfo.mutable
+            ? this._attributes.mutable[frame]
+                ? this._attributes.mutable[frame][attrId]
+                : undefined
             : this._attributes.immutable[attrId];
 
-        window.cvat.addAction('Change Attribute', () => {
-            if (typeof (oldAttr) === 'undefined') {
-                delete this._attributes.mutable[frame][attrId];
-                this.notify('attributes');
-            } else {
-                this.updateAttribute(frame, attrId, oldAttr);
-            }
-        }, () => {
-            this.updateAttribute(frame, attrId, value);
-        }, frame);
+        window.cvat.addAction(
+            'Change Attribute',
+            () => {
+                if (typeof (oldAttr) === 'undefined') {
+                    delete this._attributes.mutable[frame][attrId];
+                    this.notify('attributes');
+                } else {
+                    this.updateAttribute(frame, attrId, oldAttr);
+                }
+            },
+            () => {
+                this.updateAttribute(frame, attrId, value);
+            },
+            frame,
+        );
         // End of undo/redo code
 
         if (attrInfo.mutable) {
@@ -306,10 +415,19 @@ class ShapeModel extends Listener {
         this.notify('color');
     }
 
+    /**
+     * Given the frame number, return the attributes and position
+     * of this object in that frame.
+     * This function is needed as Shapes in an interpolated series
+     * are treated as one shape.
+     *
+     * @param {number} frame Frame number.
+     * @returns {ShapeInFrame} Attributes and position of the shape in the frame.
+     */
     interpolate(frame) {
         return {
             attributes: this._interpolateAttributes(frame),
-            position: this._interpolatePosition(frame),
+            position: this._interpolatePosition(frame),    // Each shape has its own _interpolatePosition, or doesn't have it at all.
         };
     }
 
@@ -643,12 +761,27 @@ class ShapeModel extends Listener {
 }
 
 class BoxModel extends ShapeModel {
+    /**
+     * Construct a BoxModel.
+     *
+     * @param {Object} data     Raw shape data.
+     * @param {string} type     Shape type string, of the following format:
+     *                            {annotation_mode}_{shape_type}
+     * @param {number} clientID Client side ID?
+     * @param {string} color    Color code.
+     */
     constructor(data, type, clientID, color) {
         super(data, data.shapes || [], type, clientID, color);
         this._positions = BoxModel.importPositions.call(this, data.shapes || data);
         this._setupKeyFrames();
     }
 
+    /**
+     * Given the frame number, return the position of the shape in that frame.
+     *
+     * @param {number} frame Frame number.
+     * @returns {Position} Position of the shape in that frame.
+     */
     _interpolatePosition(frame) {
         if (this._type.startsWith('annotation')) {
             return Object.assign({},
@@ -844,6 +977,11 @@ class BoxModel extends ShapeModel {
         // nothing do
     }
 
+    /**
+     * Create a dict of position, keyed by frame number.
+     *
+     * @returns {Object.<number, Position>} A dict of position, keyed by frame number.
+     */
     static importPositions(positions) {
         const imported = {};
         if (this._type === 'interpolation_box') {
@@ -1468,9 +1606,6 @@ class ShapeController {
         return this._model.color;
     }
 
-    /**
-     * @param {any} value
-     */
     set active(value) {
         this._model.active = value;
     }
@@ -2505,7 +2640,11 @@ class ShapeView extends Listener {
         }
     }
 
-    // Interface methods
+    /**
+     * Interface methods.
+     *
+     * @param {ShapeInFrame} interpolation Calculated shape information, ready to draw.
+     */
     draw(interpolation) {
         const { outside } = interpolation.position;
 
@@ -2894,6 +3033,11 @@ class BoxView extends ShapeView {
         });
     }
 
+    /**
+     * Draw the box, actually.
+     *
+     * @param {ShapePosition} position Position of the shape.
+     */
     _drawShapeUI(position) {
         position = window.cvat.translate.box.actualToCanvas(position);
         const width = position.xbr - position.xtl;
@@ -2912,6 +3056,7 @@ class BoxView extends ShapeView {
             .move(position.xtl, position.ytl)
             .addClass('shape');
 
+        // Call parent implementation.
         ShapeView.prototype._drawShapeUI.call(this);
     }
 }

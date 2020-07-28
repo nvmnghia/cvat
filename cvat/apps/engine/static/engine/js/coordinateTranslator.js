@@ -5,7 +5,8 @@
  */
 
 /* exported CoordinateTranslator */
-"use strict";
+
+'use strict';
 
 class CoordinateTranslator {
     constructor() {
