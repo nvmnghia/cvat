@@ -1,3 +1,4 @@
+/* eslint-disable no-inner-declarations */
 /* eslint-disable no-console */
 /* eslint-disable no-multi-spaces */
 /* eslint-disable guard-for-in */
@@ -1000,7 +1001,7 @@ class ShapeCollectionController {
 
             const nextShapeType = Logger.shortkeyLogDecorator((e) => {
                 if (window.cvat.mode === null) {
-                    let next = $('#shapeTypeSelector option:selected').next();
+                    let next = $('#shapeTypeSelector option').filter(':selected').next();
                     if (!next.length) {
                         next = $('#shapeTypeSelector option').first();
                     }
@@ -1012,7 +1013,7 @@ class ShapeCollectionController {
 
             const prevShapeType = Logger.shortkeyLogDecorator((e) => {
                 if (window.cvat.mode === null) {
-                    let prev = $('#shapeTypeSelector option:selected').prev();
+                    let prev = $('#shapeTypeSelector option').filter(':selected').prev();
                     if (!prev.length) {
                         prev = $('#shapeTypeSelector option').last();
                     }
@@ -1151,13 +1152,12 @@ class ShapeCollectionController {
         this._model.selectShape(this._model.lastPosition, false);
         const { activeShape } = this._model;
 
+        let getChildPosition;
+        let typeOfShape;
         if (activeShape instanceof BoxModel) {
             const {
-                xtl, ytl, xbr, ybr, occluded, z_order,
+                xtl, ytl, xbr, ybr,
             } = activeShape._positions[0];
-            const { frame } = activeShape;
-            const group = activeShape.groupId;
-            const label_id = activeShape.label;
 
             const width = xbr - xtl;
             const childBoxWidth = (width - SPACING * (col - 1)) / col;
@@ -1170,73 +1170,27 @@ class ShapeCollectionController {
                 return;
             }
 
-            // Delete the box
-            const parent = this.removeActiveShape(
-                { shiftKey: true },    // TODO: Check Shift and lock.
-                true,                  // No undo/redo, it will be handled here.
-            );
+            /**
+             * Given the child row and column position in the grid, return its coordinate/positions.
+             *
+             * @param {number} i Row number of the child.
+             * @param {number} j Column number of the child.
+             * @returns {Object} Coordinates of the child (i.e. positions).
+             */
+            getChildPosition = (i, j) => {
+                const c_xtl = xtl + j * (childBoxWidth + SPACING);
+                const c_xbr = c_xtl + childBoxWidth;
+                const c_ytl = ytl + i * (childBoxHeight + SPACING);
+                const c_ybr = c_ytl + childBoxHeight;
 
-            // Add child boxes.
-            const children = [];
-            for (let i = 0; i < row; ++i) {
-                for (let j = 0; j < col; ++j) {
-                    const c_xtl = xtl + j * (childBoxWidth + SPACING);
-                    const c_xbr = c_xtl + childBoxWidth;
-                    const c_ytl = ytl + i * (childBoxHeight + SPACING);
-                    const c_ybr = c_ytl + childBoxHeight;
-
-                    const child = this._model.add(
-                        {
-                            attributes: [],
-                            frame,
-                            group,
-                            label_id,
-                            occluded,
-                            outside: false,    // TODO: Check how outside is determined.
-                            z_order,
-                            xtl: c_xtl,
-                            ytl: c_ytl,
-                            xbr: c_xbr,
-                            ybr: c_ybr,
-                        },
-                        'annotation_box',
-                    );
-                    children.push(child);
-                }
-            }
-
-            // Undo/redo
-            // Undo/redo add: ShapeCreatorModel::finish().
-            // Undo/redo remove: ShapeModel::remove().
-            window.cvat.addAction(
-                'Split box',
-                () => {
-                    // Undo create
-                    for (const child of children) {
-                        child.removed = true;
-                        child.unsubscribe(this._model);
-                    }
-
-                    // Undo remove
-                    parent.removed = false;
-
-                    // TODO: check if update() is needed in undo/redo.
-                    // this._model.update();
-                },
-                () => {
-                    for (const child of children) {
-                        child.removed = false;
-                        child.subscribe(this._model);
-                    }
-                    parent.removed = true;
-
-                    this._model.update();
-                },
-                frame,
-            );
-
-            // Update model, which triggers rendering.
-            this._model.update();
+                return {
+                    xtl: c_xtl,
+                    ytl: c_ytl,
+                    xbr: c_xbr,
+                    ybr: c_ybr,
+                };
+            };
+            typeOfShape = 'box';
         } else if (activeShape instanceof PolygonModel) {
             // points are serialized in the following format:
             //   x0,y0 x1,y1...
@@ -1285,65 +1239,83 @@ class ShapeCollectionController {
                 }
             }
 
-            // Delete the shape
-            const parent = this.removeActiveShape(
-                { shiftKey: true },    // TODO: Check Shift and lock.
-                true,                  // No undo/redo, it will be handled here.
-            );
+            /**
+             * The same as the other one.
+             */
+            getChildPosition = (i, j) => {
+                const childPoints = [points[i][j], points[i][j + 1], points[i + 1][j + 1], points[i + 1][j]]
+                    .map(point => `${point.x},${point.y}`)
+                    .join(' ');
 
-            // Add child shapes
-            const children = new Array(row * col);
-            let counter = 0;
-            for (let i = 0; i < row; i++) {
-                for (let j = 0; j < col; j++) {
-                    const childPoints = [points[i][j], points[i][j + 1], points[i + 1][j + 1], points[i + 1][j]]
-                        .map(point => `${point.x},${point.y}`)
-                        .join(' ');
-
-                    const child = this._model.add(
-                        {
-                            attributes: [],
-                            frame: parent.frame,
-                            group: parent.groupId,
-                            label_id: parent.label,
-                            occluded: parent._positions[0].occluded,
-                            z_order: parent._positions[0].z_order,
-                            outside: false,    // TODO: Check how outside is determined.
-                            points: childPoints,
-                        },
-                        'annotation_polygon',
-                    );
-                    children[counter++] = child;
-                }
-            }
-
-            // Undo/redo
-            window.cvat.addAction(
-                'Split polygon',
-                () => {
-                    for (const child of children) {
-                        child.removed = true;
-                        child.unsubscribe(this._model);
-                    }
-                    parent.remove = false;
-
-                    // this._model.update();
-                },
-                () => {
-                    for (const child of children) {
-                        child.removed = false;
-                        child.subscribe(this._model);
-                    }
-                    parent.removed = true;    // TODO: check if parent.subscribe()/unsubscribe() is needed.
-
-                    this._model.update();
-                },
-                parent.frame,
-            );
-
-            // Update model, which triggers rendering.
-            this._model.update();
+                return {
+                    points: childPoints,
+                };
+            };
+            typeOfShape = 'polygon';
+        } else {
+            showMessage('This type of object does not support splitting.');
+            return;
         }
+
+        // Delete the box
+        const parent = this.removeActiveShape(
+            { shiftKey: true },    // TODO: Check Shift and lock.
+            true,                  // No undo/redo, it will be handled here.
+        );
+
+        // Add child boxes.
+        const children = [];
+        const basePosition = {
+            attributes: [],
+            frame: parent.frame,
+            group: parent.groupId,
+            label_id: parent.label,
+            occluded: parent._positions[0].occluded,
+            z_order: parent._positions[0].z_order,
+        };
+
+        for (let i = 0; i < row; ++i) {
+            for (let j = 0; j < col; ++j) {
+                const child = this._model.add(
+                    Object.assign({}, basePosition, getChildPosition(i, j)),
+                    `annotation_${typeOfShape}`,
+                );
+                children.push(child);
+            }
+        }
+
+        // Undo/redo
+        // Undo/redo add: ShapeCreatorModel::finish().
+        // Undo/redo remove: ShapeModel::remove().
+        window.cvat.addAction(
+            `Split ${typeOfShape}`,
+            () => {
+                // Undo create
+                for (const child of children) {
+                    child.removed = true;
+                    child.unsubscribe(this._model);
+                }
+
+                // Undo remove
+                parent.removed = false;
+
+                // TODO: check if update() is needed in undo/redo.
+                // this._model.update();
+            },
+            () => {
+                for (const child of children) {
+                    child.removed = false;
+                    child.subscribe(this._model);
+                }
+                parent.removed = true;
+
+                this._model.update();
+            },
+            window.cvat.player.frames.current,
+        );
+
+        // Update model, which triggers rendering.
+        this._model.update();
 
         /**
          * Sort 4 corners of a convex quadrilateral clockwise.
@@ -1376,10 +1348,6 @@ class ShapeCollectionController {
          *                                           so that its length is numOfPoints + 2.
          */
         function interpolatePoints(p1, p2, numOfPoints) {
-            if (numOfPoints === 0) {
-                return [];
-            }
-
             const x_step = (p2.x - p1.x - numOfPoints * SPACING) / (numOfPoints + 1);
             const y_step = (p2.y - p1.y - numOfPoints * SPACING) / (numOfPoints + 1);
 
@@ -1661,7 +1629,7 @@ class ShapeCollectionView {
                 dialogSplitBox(false, true,
                     (row, col) => this._controller.splitActiveBox(row, col));
                 break;
-            case 'split_table':
+            case 'split_grid':
                 dialogSplitBox(true, true,
                     (row, col) => this._controller.splitActiveBox(row, col));
                 break;
@@ -1853,7 +1821,8 @@ class ShapeCollectionView {
                 let error = false;
 
                 messageWindow
-                    .find('span > input:visible')
+                    .find('span > input')
+                    .filter(':visible')
                     .each((_, el) => {
                         el = $(el);
                         const val = parseInt(el.val(), 10);
@@ -1879,9 +1848,8 @@ class ShapeCollectionView {
             cancelButton.on('click', () => messageWindow.remove());
 
             // Focus at the first input field
-            // messageWindow.find('.modal-content input').first().select();
-            // Why setTimeout()?
-            setTimeout(() => messageWindow.find('.modal-content input').first().select());
+            // Why must setTimeout()?
+            setTimeout(() => messageWindow.find('.modal-content input').filter(':visible').first().select());
         }
     }
 
@@ -1895,7 +1863,7 @@ class ShapeCollectionView {
     }
 
     _updateLabelUIsState() {
-        for (const labelUI of this._labelsContent.find('.labelContentElement:not(.hidden)')) {
+        for (const labelUI of this._labelsContent.find('.labelContentElement').not('.hidden')) {
             labelUI.updateState();
         }
     }
