@@ -1,3 +1,4 @@
+/* eslint-disable no-mixed-operators */
 /* eslint-disable no-multi-spaces */
 /* eslint-disable no-console */
 /* eslint-disable prefer-destructuring */
@@ -44,19 +45,28 @@ const TEXT_MARGIN = 10;
 /** ****************************** JSDOC OBJECT  ******************************* */
 
 /**
- * Simple pair of attribute name and value.
+ * Pair of attribute name and deserialized value,
+ * mainly for client to render data.
  *
- * @typedef {Object} SimpleAttribute
+ * @typedef {Object} AttrNameVal
  * @property {string} name Name of the attribute.
  * @property {(string|number|boolean)} value Value of the attribute.
  */
 
-// /** @typedef {{attributes: SimpleAttribute, position: Object}} ShapeInFrame */
+/**
+ * Pair of attribute ID and serialized value,
+ * mainly for data exchange between client and server.
+ *
+ * @typedef {Object} AttrIdVal
+ * @property {number} id ID of the attribute.
+ * @property {string} value Value of the attribute.
+ */
+
 /**
  * Shape information in a particular frame.
  *
  * @typedef {Object} ShapeInFrame
- * @property {SimpleAttribute} attributes Attributes of the shape.
+ * @property {AttrNameVal} attributes Attributes of the shape.
  * @property {Object} position Position of the shape. More precisely,
  *                             it is a ShapePosition if the shape is a box.
  */
@@ -89,12 +99,15 @@ class ShapeModel extends Listener {
      * @param {string} type        Shape type string, of the following format:
      *                               {annotation_mode}_{shape_type}
      * @param {number} clientID    Client-side shape ID?
-     * @param {string} color       Color code.
+     * @param {{shape: string, ui: string}} color Color code.
      */
     constructor(data, positions, type, clientID, color) {
         super('onShapeUpdate', () => this);
 
+        /** @type {number} */
         this._serverID = data.id;
+
+        /** @type {number} */
         this._id = clientID;
 
         // _groupId = 0: no group
@@ -134,11 +147,9 @@ class ShapeModel extends Listener {
     /**
      * Import attributes from raw data.
      * This function populates this._attributes.
-     * Note that this is about attribute, not label.
      *
-     * @typedef {{id: number, value: string}} AttributeValue
-     * @param {AttributeValue[]} attributes Attribute id and value.
-     * @param {Object[]} positions
+     * @param {AttrIdVal[]} attributes List of attribute id and value.
+     * @param {Object[]} positions List of positions.
      */
     _importAttributes(attributes, positions) {
         // Convert attributes to a dictionary.
@@ -150,8 +161,8 @@ class ShapeModel extends Listener {
         attributes = tmp;
 
         this._attributes = {
-            immutable: {},    // Nested dict. First key is frame number, second key is attribute ID, value is attribute value.
-            mutable: {},      // Key is attribute ID, value is attribute value. Mutable = change between frames.
+            mutable: {},      // Nested dict. First key is frame number, second key is attribute ID, value is attribute value.
+            immutable: {},    // Key is attribute ID, value is attribute value. Mutable = change between frames.
         };
 
         const { labelsInfo } = window.cvat;
@@ -198,7 +209,7 @@ class ShapeModel extends Listener {
      * an object containing attribute name and value.
      *
      * @param {number} frame Frame number.
-     * @returns {Object.<number, SimpleAttribute>} Dict of SimpleAttribute keyed with attribute ID.
+     * @returns {Object.<number, AttrNameVal>} Dict of SimpleAttribute keyed with attribute ID.
      */
     _interpolateAttributes(frame) {
         const { labelsInfo } = window.cvat;
@@ -231,10 +242,10 @@ class ShapeModel extends Listener {
                 frameKey = +frameKey;
 
                 // Reasonable explanation for the 2nd operand of &&:
-                // It relies on ES6 ascending iteration order for numeral key.
+                // It relies on de facto iteration order.
                 // https://stackoverflow.com/a/5525820/5959593
-                // As this loop iterates in ascending order, the later
-                // frameKey will override the earlier, so that interpolated[attrId]
+                // As this loop iterates in ascending order, the later frameKey
+                // will override the earlier, so that interpolated[attrId]
                 // will have the value of the nearest frameKey not after frame.
                 if (attrId in this._attributes.mutable[frameKey]    // Isn't it always true???
                     && (frameKey <= frame                           // If the frame is after frameKey, update interpolated[attrID]
@@ -1146,8 +1157,21 @@ class PolyShapeModel extends ShapeModel {
         }
     }
 
+    /**
+     * Export the model.
+     * Mostly it's the reverse of several import functions in the constructors.
+     *
+     * @returns {Object} Raw shape data. Should be of the same structure
+     *                   as the data parameter passed to the constructor.
+     */
     export() {
+        /**
+         * List of pairs of attribute ID and value.
+         *
+         * @type {AttrIdVal[]}
+         */
         const objectAttributes = [];
+
         for (const attrId in this._attributes.immutable) {
             objectAttributes.push({
                 id: +attrId,
@@ -1165,14 +1189,17 @@ class PolyShapeModel extends ShapeModel {
                 }
             }
 
-            return Object.assign({}, {
-                id: this._serverID,
-                attributes: objectAttributes,
-                label_id: this._label,
-                group: this._groupId,
-                frame: this._frame,
-                type: this._type.split('_')[1],
-            }, this._positions[this._frame]);
+            return Object.assign(
+                {
+                    id: this._serverID,
+                    attributes: objectAttributes,
+                    label_id: this._label,
+                    group: this._groupId,
+                    frame: this._frame,
+                    type: this._type.split('_')[1],
+                },
+                this._positions[this._frame],
+            );
         }
 
         const track = {
@@ -1195,11 +1222,14 @@ class PolyShapeModel extends ShapeModel {
                 }
             }
 
-            track.shapes.push(Object.assign({
-                frame: +frame,
-                attributes: shapeAttributes,
-                type: this._type.split('_')[1],
-            }, this._positions[frame]));
+            track.shapes.push(Object.assign(
+                {
+                    frame: +frame,
+                    attributes: shapeAttributes,
+                    type: this._type.split('_')[1],
+                },
+                this._positions[frame],
+            ));
         }
 
         return track;
@@ -1216,6 +1246,12 @@ class PolyShapeModel extends ShapeModel {
         }
     }
 
+    /**
+     * Deserialize points (serialized in window.cvat.translate.points.serverToClient).
+     *
+     * @param {string} serializedPoints Serialized points.
+     * @returns {{x: number, y: number}[]} Deserialized point coordinates.
+     */
     static convertStringToNumberArray(serializedPoints) {
         const pointArray = [];
         for (const pair of serializedPoints.split(' ')) {
@@ -1231,7 +1267,20 @@ class PolyShapeModel extends ShapeModel {
         return arrayPoints.map(point => `${point.x},${point.y}`).join(' ');
     }
 
+    /**
+     * Convert raw position data to position data for the PolyShapeModel.
+     *
+     * @param {Object} positions Raw position data.
+     * @return {Object.<number, Object>} Shape data, keyed with frame number.
+     */
     static importPositions(positions) {
+        /**
+         * Get width and height of the rectangular bounding box of the shape.
+         *
+         * @param {string} points Serialized points of the shape.
+         * @returns {number[]} Array of 2 numbers, which are the width
+         *                     and height of the rectangular bounding box.
+         */
         function getBBRect(points) {
             const box = {
                 xtl: Number.MAX_SAFE_INTEGER,
@@ -1421,7 +1470,10 @@ class PolylineModel extends PolyShapeModel {
 class PolygonModel extends PolyShapeModel {
     constructor(data, type, id, color) {
         super(data, type, id, color);
+
+        /** @type {number} */
         this._minPoints = 3;
+
         this._draggable = false;
     }
 
@@ -1703,45 +1755,52 @@ class ShapeView extends Listener {
             this._uis.shape.front();
             if (!this._controller.lock) {
                 // Setup drag events
-                this._uis.shape.draggable().on('dragstart', () => {
-                    events.drag = Logger.addContinuedEvent(Logger.EventType.dragObject);
-                    this._flags.dragging = true;
-                    blurAllElements();
-                    this._hideShapeText();
-                    this.notify('drag');
-                }).on('dragend', (e) => {
-                    const p1 = e.detail.handler.startPoints.point;
-                    const p2 = e.detail.p;
-                    events.drag.close();
-                    events.drag = null;
-                    this._flags.dragging = false;
-                    if (Math.sqrt(Math.pow((p1.x - p2.x), 2) + Math.pow((p1.y - p2.y), 2)) > 1) {
-                        const frame = window.cvat.player.frames.current;
-                        this._controller.updatePosition(frame, this._buildPosition());
-                    }
-                    this._showShapeText();
-                    this.notify('drag');
-                });
+                this._uis.shape
+                    .draggable()
+                    .on('dragstart', () => {
+                        events.drag = Logger.addContinuedEvent(Logger.EventType.dragObject);
+                        this._flags.dragging = true;
+                        blurAllElements();
+                        this._hideShapeText();
+                        this.notify('drag');
+                    })
+                    .on('dragend', (e) => {
+                        const p1 = e.detail.handler.startPoints.point;
+                        const p2 = e.detail.p;
+                        events.drag.close();
+                        events.drag = null;
+                        this._flags.dragging = false;
+                        if ((p1.x - p2.x) ** 2 + (p1.y - p2.y) ** 2 > 1) {
+                            const frame = window.cvat.player.frames.current;
+                            this._controller.updatePosition(frame, this._buildPosition());
+                        }
+                        this._showShapeText();
+                        this.notify('drag');
+                    });
 
                 // Setup resize events
                 let objWasResized = false;
-                this._uis.shape.selectize({
-                    classRect: 'shapeSelect',
-                    rotationPoint: false,
-                    pointSize: POINT_RADIUS * 2 / window.cvat.player.geometry.scale,
-                    deepSelect: true,
-                }).resize({
-                    snapToGrid: 0.1,
-                }).on('resizestart', () => {
-                    objWasResized = false;
-                    this._flags.resizing = true;
-                    events.resize = Logger.addContinuedEvent(Logger.EventType.resizeObject);
-                    blurAllElements();
-                    this._hideShapeText();
-                    this.notify('resize');
-                }).on('resizing', () => {
-                    objWasResized = true;
-                })
+                this._uis.shape
+                    .selectize({
+                        classRect: 'shapeSelect',
+                        rotationPoint: false,
+                        pointSize: POINT_RADIUS * 2 / window.cvat.player.geometry.scale,
+                        deepSelect: true,
+                    })
+                    .resize({
+                        snapToGrid: 0.1,
+                    })
+                    .on('resizestart', () => {
+                        objWasResized = false;
+                        this._flags.resizing = true;
+                        events.resize = Logger.addContinuedEvent(Logger.EventType.resizeObject);
+                        blurAllElements();
+                        this._hideShapeText();
+                        this.notify('resize');
+                    })
+                    .on('resizing', () => {
+                        objWasResized = true;
+                    })
                     .on('resizedone', () => {
                         events.resize.close();
                         events.resize = null;
@@ -1767,22 +1826,27 @@ class ShapeView extends Listener {
                 const offset = angle / 90 < 0 ? angle / 90 + centers.length : angle / 90;
 
                 for (let i = 0; i < 4; ++i) {
-                    elements[centers[i]].removeClass(`svg_select_points_${centers[i]}`)
+                    elements[centers[i]]
+                        .removeClass(`svg_select_points_${centers[i]}`)
                         .addClass(`svg_select_points_${centers[(i + offset) % centers.length]}`);
-                    elements[corners[i]].removeClass(`svg_select_points_${corners[i]}`)
+                    elements[corners[i]]
+                        .removeClass(`svg_select_points_${corners[i]}`)
                         .addClass(`svg_select_points_${corners[(i + offset) % centers.length]}`);
                 }
 
                 this._updateColorForDots();
                 const self = this;
                 $('.svg_select_points').each(function () {
-                    $(this).on('mouseover', () => {
-                        this.instance.attr('stroke-width', STROKE_WIDTH * 2 / window.cvat.player.geometry.scale);
-                    }).on('mouseout', () => {
-                        this.instance.attr('stroke-width', STROKE_WIDTH / window.cvat.player.geometry.scale);
-                    }).on('mousedown', () => {
-                        self._positionateMenus();
-                    });
+                    $(this)
+                        .on('mouseover', () => {
+                            this.instance.attr('stroke-width', STROKE_WIDTH * 2 / window.cvat.player.geometry.scale);
+                        })
+                        .on('mouseout', () => {
+                            this.instance.attr('stroke-width', STROKE_WIDTH / window.cvat.player.geometry.scale);
+                        })
+                        .on('mousedown', () => {
+                            self._positionateMenus();
+                        });
                 });
 
                 this._flags.editable = true;
@@ -1800,6 +1864,7 @@ class ShapeView extends Listener {
 
             this._uis.shape.on('contextmenu.contextMenu', (e) => {
                 $('.custom-menu').hide(100);
+
                 const type = this._controller.type.split('_');
                 if (type[0] === 'interpolation') {
                     this._shapeContextMenu.find('.interpolationItem').removeClass('hidden');
@@ -1831,7 +1896,7 @@ class ShapeView extends Listener {
                 }
 
                 const splitBoxItem = this._shapeContextMenu.find('li[action^="split_"]');
-                if (type[1] === 'box') {
+                if (['box', 'polygon'].includes(type[1])) {
                     splitBoxItem.show();
                 } else {
                     splitBoxItem.hide();

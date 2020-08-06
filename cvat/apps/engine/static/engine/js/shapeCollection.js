@@ -62,6 +62,8 @@ class ShapeCollectionModel extends Listener {
         this._flush = false;
         this._lastPos = { x: 0, y: 0 };
         this._z_order = { max: 0, min: 0 };
+
+        /** @type {string[]} */
         this._colors = [
             '#0066FF', '#AF593E', '#01A368', '#FF861F', '#ED0A3F', '#FF3F34', '#76D7EA',
             '#8359A3', '#FBE870', '#C5E17A', '#03BB85', '#FFDF00', '#8B8680', '#0A6B0D',
@@ -91,6 +93,8 @@ class ShapeCollectionModel extends Listener {
 
     /**
      * Randomize color.
+     *
+     * @param {{shape: string, ui: string}}
      */
     nextColor() {
         // Step used for more color variability
@@ -245,11 +249,11 @@ class ShapeCollectionModel extends Listener {
 
     /**
      * Import data to ShapeCollectionModel to render.
-     * In buildAnnotationUI(), there is a case of this function
-     * followed by ShapeCollectionModel::update().
-     * Is it mandatory?
+     * In buildAnnotationUI(), there is an instance of this function
+     * followed by ShapeCollectionModel::update(). Is it mandatory?
      *
-     * @param {*} data Data of all shapes in this job.
+     * @param {Object} data Server data of all shapes in this job.
+     * @returns {ShapeCollectionModel} This object.
      */
     import(data) {
         /**
@@ -295,6 +299,12 @@ class ShapeCollectionModel extends Listener {
         return this;
     }
 
+    /**
+     * Export data from ShapeCollectionModel to server format.
+     * Mostly it's the reverse of import().
+     *
+     * @returns {Object[]} Array of 2 objects: the first one is
+     */
     export() {
         function _convertShape(shape) {
             if (shape.type === 'box') {
@@ -432,11 +442,10 @@ class ShapeCollectionModel extends Listener {
         if (type.startsWith('interpolation')) {
             this._interpolationShapes.push(model);
         } else {
-            // Add shape to list of shape in the frame.
             this._annotationShapes[model.frame] = this._annotationShapes[model.frame] || [];
-            this._annotationShapes[model.frame].push(model);
+            this._annotationShapes[model.frame].push(model);    // Add shape to list of shapes in the frame.
         }
-        this._shapes.push(model);
+        this._shapes.push(model);    // Add shape to list of all shapes.
         model.subscribe(this);
 
         // Update collection groups & group index
@@ -1123,14 +1132,12 @@ class ShapeCollectionController {
     }
 
     /**
-     * Given the number of row and column,
-     * split the box accordingly.
-     * This function first removes the box,
-     * then adds child boxes, using existing function.
+     * Given the number of row and column, split the active rectangle.
+     * This function first removes the rectangle, then adds child ones.
      * The undo/redo is handled here.
      *
-     * @param row {number} Number of row. 1 if don't split row.
-     * @param col {number} Number of column. 1 if don't split column.
+     * @param {number} row Number of row. 1 if don't split row.
+     * @param {number} col Number of column. 1 if don't split column.
      */
     splitActiveBox(row, col) {
         if (row === 1 && col === 1) {
@@ -1144,91 +1151,250 @@ class ShapeCollectionController {
         this._model.selectShape(this._model.lastPosition, false);
         const { activeShape } = this._model;
 
-        // First remove the active box.
-        // Before removing, needed attributes in activeShape
-        // must be backup, otherwise activeShape would be null.
-        const {
-            xtl, ytl, xbr, ybr, occluded, z_order,
-        } = activeShape._positions[0];
-        const { frame } = activeShape;
-        const group = activeShape.groupId;
-        const label_id = activeShape.label;
+        if (activeShape instanceof BoxModel) {
+            const {
+                xtl, ytl, xbr, ybr, occluded, z_order,
+            } = activeShape._positions[0];
+            const { frame } = activeShape;
+            const group = activeShape.groupId;
+            const label_id = activeShape.label;
 
-        const parent = this.removeActiveShape(
-            { shiftKey: true },    // TODO: Check Shift and lock.
-            true,                  // No undo/redo.
-        );
+            const width = xbr - xtl;
+            const childBoxWidth = (width - SPACING * (col - 1)) / col;
+            const height = ybr - ytl;
+            const childBoxHeight = (height - SPACING * (row - 1)) / row;
 
-        const width = xbr - xtl;
-        const childBoxWidth = (width - SPACING * (col - 1)) / col;
-        const height = ybr - ytl;
-        const childBoxHeight = (height - SPACING * (row - 1)) / row;
-
-        if (childBoxWidth * childBoxHeight < AREA_TRESHOLD) {
-            showMessage('The area of the child boxes are too small.');
-            return;
-        }
-
-        // Then add child box.
-        const children = [];
-        for (let i = 0; i < row; ++i) {
-            for (let j = 0; j < col; ++j) {
-                const c_xtl = xtl + j * (childBoxWidth + SPACING);
-                const c_xbr = c_xtl + childBoxWidth;
-                const c_ytl = ytl + i * (childBoxHeight + SPACING);
-                const c_ybr = c_ytl + childBoxHeight;
-
-                const child = this._model.add(
-                    {
-                        attributes: [],
-                        frame,
-                        group,
-                        label_id,
-                        occluded,
-                        outside: false,    // TODO: Check how outside is determined.
-                        xtl: c_xtl,
-                        ytl: c_ytl,
-                        xbr: c_xbr,
-                        ybr: c_ybr,
-                        z_order,
-                    },
-                    'annotation_box',
-                );
-                children.push(child);
+            // Check if the split is feasible
+            if (childBoxWidth * childBoxHeight < AREA_TRESHOLD) {
+                showMessage('The area of the child boxes are too small.');
+                return;
             }
+
+            // Delete the box
+            const parent = this.removeActiveShape(
+                { shiftKey: true },    // TODO: Check Shift and lock.
+                true,                  // No undo/redo, it will be handled here.
+            );
+
+            // Add child boxes.
+            const children = [];
+            for (let i = 0; i < row; ++i) {
+                for (let j = 0; j < col; ++j) {
+                    const c_xtl = xtl + j * (childBoxWidth + SPACING);
+                    const c_xbr = c_xtl + childBoxWidth;
+                    const c_ytl = ytl + i * (childBoxHeight + SPACING);
+                    const c_ybr = c_ytl + childBoxHeight;
+
+                    const child = this._model.add(
+                        {
+                            attributes: [],
+                            frame,
+                            group,
+                            label_id,
+                            occluded,
+                            outside: false,    // TODO: Check how outside is determined.
+                            z_order,
+                            xtl: c_xtl,
+                            ytl: c_ytl,
+                            xbr: c_xbr,
+                            ybr: c_ybr,
+                        },
+                        'annotation_box',
+                    );
+                    children.push(child);
+                }
+            }
+
+            // Undo/redo
+            // Undo/redo add: ShapeCreatorModel::finish().
+            // Undo/redo remove: ShapeModel::remove().
+            window.cvat.addAction(
+                'Split box',
+                () => {
+                    // Undo create
+                    for (const child of children) {
+                        child.removed = true;
+                        child.unsubscribe(this._model);
+                    }
+
+                    // Undo remove
+                    parent.removed = false;
+
+                    // TODO: check if update() is needed in undo/redo.
+                    // this._model.update();
+                },
+                () => {
+                    for (const child of children) {
+                        child.removed = false;
+                        child.subscribe(this._model);
+                    }
+                    parent.removed = true;
+
+                    this._model.update();
+                },
+                frame,
+            );
+
+            // Update model, which triggers rendering.
+            this._model.update();
+        } else if (activeShape instanceof PolygonModel) {
+            // points are serialized in the following format:
+            //   x0,y0 x1,y1...
+            const corners = activeShape._positions[0].points
+                .split(' ')
+                .map(pair => {
+                    pair = pair.split(',');
+                    return {
+                        x: +pair[0],
+                        y: +pair[1],
+                    };
+                });
+
+            // Check if the split is feasible
+            if (corners.length !== 4) {
+                showMessage('Only quadrilateral can be splitted.');
+                return;
+            }
+
+            // corners is a (row + 1) x (col + 1) matrix containing all points in the grid
+            const points = [...Array(row + 1)].map(() => Array(col + 1));
+
+            const lastRow = row;
+            const lastCol = col;
+
+            // First populate the 4 corners
+            [
+                points[0][0],                // top left
+                points[0][lastCol],          // top right
+                points[lastRow][lastCol],    // bottom right
+                points[lastRow][0],          // bottom left
+            ] = sortCorners(corners);
+
+            // Then populate the 2 side edges
+            // Yes edge points are reassigned along the way, for better code visibility.
+            const rightEdge = interpolatePoints(points[0][lastCol], points[lastRow][lastCol], row - 1);
+            for (let i = 0; i < rightEdge.length; i++) points[i][lastCol] = rightEdge[i];
+            const leftEdge = interpolatePoints(points[0][0], points[lastRow][0], row - 1);
+            for (let i = 0; i < leftEdge.length; i++) points[i][0] = leftEdge[i];
+
+            // Then fill the inside
+            for (let i = 0; i <= lastRow; i++) {
+                const line = interpolatePoints(points[i][0], points[i][lastCol], col - 1);
+                for (let j = 0; j <= lastCol; j++) {
+                    points[i][j] = line[j];
+                }
+            }
+
+            // Delete the shape
+            const parent = this.removeActiveShape(
+                { shiftKey: true },    // TODO: Check Shift and lock.
+                true,                  // No undo/redo, it will be handled here.
+            );
+
+            // Add child shapes
+            const children = new Array(row * col);
+            let counter = 0;
+            for (let i = 0; i < row; i++) {
+                for (let j = 0; j < col; j++) {
+                    const childPoints = [points[i][j], points[i][j + 1], points[i + 1][j + 1], points[i + 1][j]]
+                        .map(point => `${point.x},${point.y}`)
+                        .join(' ');
+
+                    const child = this._model.add(
+                        {
+                            attributes: [],
+                            frame: parent.frame,
+                            group: parent.groupId,
+                            label_id: parent.label,
+                            occluded: parent._positions[0].occluded,
+                            z_order: parent._positions[0].z_order,
+                            outside: false,    // TODO: Check how outside is determined.
+                            points: childPoints,
+                        },
+                        'annotation_polygon',
+                    );
+                    children[counter++] = child;
+                }
+            }
+
+            // Undo/redo
+            window.cvat.addAction(
+                'Split polygon',
+                () => {
+                    for (const child of children) {
+                        child.removed = true;
+                        child.unsubscribe(this._model);
+                    }
+                    parent.remove = false;
+
+                    // this._model.update();
+                },
+                () => {
+                    for (const child of children) {
+                        child.removed = false;
+                        child.subscribe(this._model);
+                    }
+                    parent.removed = true;    // TODO: check if parent.subscribe()/unsubscribe() is needed.
+
+                    this._model.update();
+                },
+                parent.frame,
+            );
+
+            // Update model, which triggers rendering.
+            this._model.update();
         }
 
-        // Undo/redo
-        // Undo/redo add: ShapeCreatorModel::finish().
-        // Undo/redo remove: ShapeModel::remove().
-        window.cvat.addAction(
-            'Split box',
-            () => {
-                // Undo create
-                for (const child of children) {
-                    child.removed = true;
-                    child.unsubscribe(this._model);
-                }
+        /**
+         * Sort 4 corners of a convex quadrilateral clockwise.
+         * The first corner is the top left.
+         *
+         * @param {Array.<{x: number, y: number}>} corners Corners to be sorted.
+         * @returns {Array.<{x: number, y: number}>} Sorted corners.
+         */
+        function sortCorners(corners) {
+            const centroid = {
+                x: corners.reduce((acc, corner) => acc + corner.x, 0) / 4,
+                y: corners.reduce((acc, corner) => acc + corner.y, 0) / 4,
+            };
 
-                // Undo remove
-                parent.removed = false;
+            return [
+                corners.find(corner => corner.x < centroid.x && corner.y < centroid.y),
+                corners.find(corner => corner.x > centroid.x && corner.y < centroid.y),
+                corners.find(corner => corner.x > centroid.x && corner.y > centroid.y),
+                corners.find(corner => corner.x < centroid.x && corner.y > centroid.y),
+            ];
+        }
 
-                // TODO: check if update() is needed in undo/redo.
-                // this._model.update();
-            },
-            () => {
-                for (const child in children) {
-                    child.removed = false;
-                    child.subscribe(this._model);
-                }
+        /**
+         * Generate in-between points from p1 to p2.
+         *
+         * @param {{x: number, y: number}} p1 Starting points.
+         * @param {{x: number, y: number}} p2 Ending points.
+         * @param {number} numOfPoints Number of point to interpolate, excluding p1 and p2.
+         * @returns {Array.<{x: number, y: number}>} Generated points, including p1 and p2,
+         *                                           so that its length is numOfPoints + 2.
+         */
+        function interpolatePoints(p1, p2, numOfPoints) {
+            if (numOfPoints === 0) {
+                return [];
+            }
 
-                parent.removed = true;
-            },
-            frame,
-        );
+            const x_step = (p2.x - p1.x - numOfPoints * SPACING) / (numOfPoints + 1);
+            const y_step = (p2.y - p1.y - numOfPoints * SPACING) / (numOfPoints + 1);
 
-        // Update model, which triggers rendering.
-        this._model.update();
+            const points = new Array(numOfPoints + 2);
+            points[0] = p1;
+            for (let i = 1; i <= numOfPoints; i++) {
+                points[i] = {
+                    x: p1.x + i * (x_step + SPACING),
+                    y: p1.y + i * (y_step + SPACING),
+                };
+            }
+            points[numOfPoints + 1] = p2;
+
+            return points;
+        }
     }
 
     /**
@@ -1237,6 +1403,7 @@ class ShapeCollectionController {
      * @param {*} e
      * @param {?boolean} disableUndoRedo Disable undo/redo, as splitting
      *                                   has its own undo/redo code.
+     * @returns {?ShapeModel} The removed shape, if disableUndoRedo is true.
      */
     removeActiveShape(e, disableUndoRedo = false) {
         if (window.cvat.mode === null) {

@@ -18,14 +18,18 @@ which means that when `shapeCollectionModel` calls `notify()`, that `shapeCollec
 
 Shapes in an interpolated series are treated as one shape, and the position is calculated when needed, using `ShapeModel::interpolate()` and related methods.
 
-Note that the `A.subscribe(B)` in the source code stands for `A adds B as a listener`, or shorter `B subscribes A`. The choice of name is crazy.
+### 1.1. Notification chain
 
-The below text illustrates chain of subscribers. `Model`s subscribe to their `View` is not illustrated. The notation `A --func()--> B` means `A subscribes B`, or `B.subscribe(A)`, and `A` notifies `B` by calling `B.func()`.
+Note that the `A.subscribe(B)` in the source code stands for `A adds B as a listener`, or shorter `B subscribes A`. This choice of name is crazy.
 
-```
-ShapeCollectionView --onCollectionUpdate--> ShapeCollectionModel --onShapeUpdate--> ShapeModel
-                    \                                                             /
-                     \---onShapeViewUpdate---> ShapeView -----onShapeUpdate------/
+The below graph illustrates a simplified chain of notification. The notation `A --func--> B` means `A` notifies `B` by calling `B.func()`.
+
+```mermaid
+graph LR;
+    ShapeCollectionModel -- onCollectionUpdate --> ShapeCollectionView
+    ShapeModel -- onShapeUpdate --> ShapeCollectionModel
+    ShapeView -- onShapeViewUpdate --> ShapeCollectionView
+    ShapeModel -- onShapeUpdate --> ShapeView
 ```
 
 ## 2. Use case
@@ -120,5 +124,20 @@ activeShape = {
     _serverID: undefined,
     _type: 'annotation_box',
     _updateReason: null
+}
+```
+
+`data` that is passed into `PolygonModel`'s constructor:
+
+```js
+data = {
+    attributes:(0) [],
+    frame: 0,
+    group: 0,
+    label_id: 1,
+    occluded: false,
+    outside: false,
+    points: '2048.4140625,1377.6796875 2787.8685699588423,1370.0444958847693 2787.8685699588423,1855.9144804526695 1875.606481481478,2161.7433127571967',
+    z_order: 2
 }
 ```

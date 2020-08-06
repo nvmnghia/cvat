@@ -1,3 +1,4 @@
+/* eslint-disable no-multi-spaces */
 /*
  * Copyright (C) 2018 Intel Corporation
  *
@@ -102,17 +103,27 @@ class CoordinateTranslator {
             canvasToActual(canvasPoints) {
                 return this._convert(canvasPoints, -1);
             },
-
+            /**
+             * Convert server point format to client point format.
+             *
+             * @param {Object} shape Server raw data.
+             * @returns {{points: string}} Point data of shape, serialized in the following format:
+             *                             "x0,y0 x1,y1..."
+             */
             serverToClient(shape) {
                 return {
-                    points: shape.points.reduce((acc, el, idx) => {
-                        if (idx % 2) {
-                            acc.slice(-1)[0].push(el);
-                        } else {
-                            acc.push([el]);
-                        }
-                        return acc;
-                    }, []).map(point => point.join(',')).join(' '),
+                    points: shape.points
+                        .reduce((acc, el, idx, src) => {
+                            // Add 2 consecutive values in even idx, do nothing otherwise.
+                            if (idx % 2 === 0) {
+                                acc.push([src[idx], src[idx + 1]]);
+                            }
+
+                            // Array of point coordinate, each element is [x, y]
+                            return acc;
+                        }, [])
+                        .map(pointCoordinates => pointCoordinates.join(','))
+                        .join(' '),
                 };
             },
 

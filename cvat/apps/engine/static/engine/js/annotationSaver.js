@@ -16,6 +16,12 @@
 
 
 class AnnotationSaverModel extends Listener {
+    /**
+     * What?
+     *
+     * @param {Object} initialData Server data of all shapes in this job.
+     * @param {ShapeCollectionModel} shapeCollection Client data of all shapes in this job.
+     */
     constructor(initialData, shapeCollection) {
         super('onAnnotationSaverUpdate', () => this._state);
 

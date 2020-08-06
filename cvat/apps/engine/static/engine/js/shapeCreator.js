@@ -255,7 +255,7 @@ class ShapeCreatorView {
 
         const labels = window.cvat.labelsInfo.labels();
         const labelsKeys = Object.keys(labels);
-        for (let i = 0; i < labelsKeys.length; i += 1) {
+        for (let i = 0; i < labelsKeys.length; i++) {
             this._labelSelector.append(
                 // eslint-disable-next-line
                 $(`<option value=${labelsKeys[i]}> ${labels[labelsKeys[i]].normalize()} </option>`)
@@ -264,51 +264,61 @@ class ShapeCreatorView {
         this._labelSelector.val(labelsKeys[0]);
 
         this._typeSelector.val('box');
-        this._typeSelector.on('change', (e) => {
-            // FIXME: In the future we have to make some generic solution
-            const mode = this._modeSelector.prop('value');
-            const type = $(e.target).prop('value');
-            if (type !== 'box' && type !== 'box_by_4_points'
-                && !(type === 'points' && this._polyShapeSize === 1) && mode !== 'annotation') {
-                this._modeSelector.prop('value', 'annotation');
-                this._controller.setDefaultShapeMode('annotation');
-                showMessage('Only the annotation mode allowed for the shape');
-            }
-            this._controller.setDefaultShapeType(type);
-        }).trigger('change');
+        this._typeSelector
+            .on('change', (e) => {
+                // FIXME: In the future we have to make some generic solution
+                const mode = this._modeSelector.prop('value');
+                const type = $(e.target).prop('value');
+                if (type !== 'box' && type !== 'box_by_4_points'
+                    && !(type === 'points' && this._polyShapeSize === 1)
+                    && mode !== 'annotation') {
+                    this._modeSelector.prop('value', 'annotation');
+                    this._controller.setDefaultShapeMode('annotation');
+                    showMessage('Only the annotation mode allowed for the shape');
+                }
+                this._controller.setDefaultShapeType(type);
+            })
+            .trigger('change');
 
-        this._labelSelector.on('change', (e) => {
-            this._controller.setDefaultShapeLabel($(e.target).prop('value'));
-        }).trigger('change');
+        this._labelSelector
+            .on('change', (e) => {
+                this._controller.setDefaultShapeLabel($(e.target).prop('value'));
+            })
+            .trigger('change');
 
-        this._modeSelector.on('change', (e) => {
-            // FIXME: In the future we have to make some generic solution
-            const mode = $(e.target).prop('value');
-            const type = this._typeSelector.prop('value');
-            if (mode !== 'annotation' && !(type === 'points' && this._polyShapeSize === 1)
-                && type !== 'box' && type !== 'box_by_4_points') {
-                this._typeSelector.prop('value', 'box');
-                this._controller.setDefaultShapeType('box');
-                showMessage('Only boxes and single point allowed in the interpolation mode');
-            }
-            this._controller.setDefaultShapeMode(mode);
-        }).trigger('change');
+        this._modeSelector
+            .on('change', (e) => {
+                // FIXME: In the future we have to make some generic solution
+                const mode = $(e.target).prop('value');
+                const type = this._typeSelector.prop('value');
+                if (mode !== 'annotation'
+                    && !(type === 'points' && this._polyShapeSize === 1)
+                    && type !== 'box' && type !== 'box_by_4_points') {
+                    this._typeSelector.prop('value', 'box');
+                    this._controller.setDefaultShapeType('box');
+                    showMessage('Only boxes and single point allowed in the interpolation mode');
+                }
+                this._controller.setDefaultShapeMode(mode);
+            })
+            .trigger('change');
 
-        this._polyShapeSizeInput.on('change', (e) => {
-            e.stopPropagation();
-            let size = +e.target.value;
-            if (size < 0) size = 0;
-            if (size > 100) size = 0;
-            const mode = this._modeSelector.prop('value');
-            const type = this._typeSelector.prop('value');
-            if (mode === 'interpolation' && type === 'points' && size !== 1) {
-                showMessage('Only single point allowed in the interpolation mode');
-                size = 1;
-            }
+        this._polyShapeSizeInput
+            .on('change', (e) => {
+                e.stopPropagation();
 
-            e.target.value = size || '';
-            this._polyShapeSize = size;
-        }).trigger('change');
+                let size = +e.target.value;
+                size = size < 0 || size > 100 ? 0 : size;
+                const mode = this._modeSelector.prop('value');
+                const type = this._typeSelector.prop('value');
+                if (mode === 'interpolation' && type === 'points' && size !== 1) {
+                    showMessage('Only single point allowed in the interpolation mode');
+                    size = 1;
+                }
+
+                e.target.value = size || '';
+                this._polyShapeSize = size;
+            })
+            .trigger('change');
 
         this._polyShapeSizeInput.on('keydown', (e) => {
             e.stopPropagation();
@@ -577,18 +587,23 @@ class ShapeCreatorView {
         });
     }
 
+    /**
+     * Sort points clockwise.
+     * There's no guarantee about the first point.
+     *
+     * @param {Array.<{x: number, y: number}>} points The points to be sorted.
+     * @returns {Array.<{x: number, y: number, ang: number}>} The sorted points.
+     */
     _sortClockwise(points) {
-        points.sort((a, b) => a.y - b.y);
         // Get center y
+        points.sort((a, b) => a.y - b.y);
         const cy = (points[0].y + points[points.length - 1].y) / 2;
 
-        // Sort from right to left
-        points.sort((a, b) => b.x - a.x);
-
         // Get center x
+        points.sort((a, b) => b.x - a.x);
         const cx = (points[0].x + points[points.length - 1].x) / 2;
 
-        // Center point
+        // Center point of the outer bounding box
         const center = {
             x: cx,
             y: cy,
@@ -606,9 +621,9 @@ class ShapeCreatorView {
             point.angle = ang; // add the angle to the point
         });
 
-        // first sort clockwise
-        points.sort((a, b) => a.angle - b.angle);
-        return points.reverse();
+        // Sort clockwise
+        points.sort((a, b) => b.angle - a.angle);
+        return points;
     }
 
     _makeCuboid(actualPoints) {
