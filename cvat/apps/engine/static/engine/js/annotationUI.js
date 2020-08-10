@@ -1,3 +1,4 @@
+/* eslint-disable no-multi-spaces */
 /* eslint-disable no-console */
 /*
  * Copyright (C) 2018-2019 Intel Corporation
@@ -503,7 +504,7 @@ function buildAnnotationUI(
                 stop: jobData.stop_frame,
             },
         },
-        mode: null,
+        mode: null,    // Possible mode: null, 'aam', 'paste', 'drag', 'resize', 'creation', 'groupping', 'merge'
         job: {
             z_order: taskData.z_order,
             id: jobData.id,
@@ -606,26 +607,33 @@ function buildAnnotationUI(
     const shapeGrouperController = new ShapeGrouperController(shapeGrouperModel);
     const shapeGrouperView = new ShapeGrouperView(shapeGrouperModel, shapeGrouperController);
 
+    // Actual size of the player, not the size of the canvas.
     const playerGeometry = {
         width: $('#playerFrame').width(),
         height: $('#playerFrame').height(),
     };
 
     const playerModel = new PlayerModel(taskData, playerGeometry);
-    const playerController = new PlayerController(playerModel,
+    const playerController = new PlayerController(
+        playerModel,
         () => shapeCollectionModel.activeShape,
         direction => shapeCollectionModel.find(direction),
-        Object.assign({}, playerGeometry, {
-            left: $('#playerFrame').offset().left,
-            top: $('#playerFrame').offset().top,
-        }));
+        Object.assign(
+            {},
+            playerGeometry,
+            {
+                left: $('#playerFrame').offset().left,    // offset() get position of border box (margin excluded)
+                top: $('#playerFrame').offset().top,      // relative to the whole document.
+            },
+        ),
+    );
     new PlayerView(playerModel, playerController);
 
-    const aamModel = new AAMModel(shapeCollectionModel, (xtl, xbr, ytl, ybr) => {
-        playerModel.focus(xtl, xbr, ytl, ybr);
-    }, () => {
-        playerModel.fit();
-    });
+    const aamModel = new AAMModel(
+        shapeCollectionModel,
+        (xtl, xbr, ytl, ybr) => playerModel.focus(xtl, xbr, ytl, ybr),
+        () => playerModel.fit(),
+    );
     const aamController = new AAMController(aamModel);
     new AAMView(aamModel, aamController);
 
