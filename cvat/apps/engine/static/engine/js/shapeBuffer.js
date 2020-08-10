@@ -1,3 +1,6 @@
+/* eslint-disable no-underscore-dangle */
+/* eslint-disable no-use-before-define */
+/* eslint-disable no-plusplus */
 /*
  * Copyright (C) 2018 Intel Corporation
  *
@@ -18,9 +21,12 @@
     SVG:false
 */
 
-"use strict";
+'use strict';
 
-class ShapeBufferModel extends Listener  {
+class ShapeBufferModel extends Listener {
+    /**
+     * @param {ShapeCollectionModel} collection
+     */
     constructor(collection) {
         super('onShapeBufferUpdate', () => this);
         this._collection = collection;
@@ -32,7 +38,7 @@ class ShapeBufferModel extends Listener  {
             position: null,
             attributes: null,
             label: null,
-            clear: function() {
+            clear() {
                 this.type = null;
                 this.mode = null;
                 this.position = null;
@@ -68,10 +74,10 @@ class ShapeBufferModel extends Listener  {
             return null;
         }
 
-        let attributes = [];
-        let object = {};
+        const attributes = [];
+        const object = {};
 
-        for (let attrId in this._shape.attributes) {
+        for (const attrId in this._shape.attributes) {
             attributes.push({
                 id: attrId,
                 value: this._shape.attributes[attrId].value,
@@ -119,22 +125,20 @@ class ShapeBufferModel extends Listener  {
     switchPaste() {
         if (this._pasteMode) {
             this._cancelPaste();
-        }
-        else {
+        } else {
             this._startPaste();
         }
     }
 
     copyToBuffer() {
-        let activeShape = this._collection.activeShape;
+        const { activeShape } = this._collection;
         if (activeShape) {
             Logger.addEvent(Logger.EventType.copyObject, {
                 count: 1,
             });
-            let interpolation = activeShape.interpolate(window.cvat.player.frames.current);
+            const interpolation = activeShape.interpolate(window.cvat.player.frames.current);
             if (!interpolation.position.outsided) {
-                this._shape.type = activeShape.type.split('_')[1];
-                this._shape.mode = activeShape.type.split('_')[0];
+                [this._shape.mode, this._shape.type] = activeShape.type.split('_');
                 this._shape.label = activeShape.label;
                 this._shape.attributes = interpolation.attributes;
                 this._shape.position = interpolation.position;
@@ -145,24 +149,23 @@ class ShapeBufferModel extends Listener  {
     }
 
     pasteToFrame(box, polyPoints) {
-        let object = this._makeObject(box, polyPoints, this._shape.mode === 'interpolation');
+        const object = this._makeObject(box, polyPoints, this._shape.mode === 'interpolation');
 
         if (object) {
             if (this._shape.type === 'cuboid'
                 && !CuboidModel.isWithinFrame(PolyShapeModel.convertStringToNumberArray(polyPoints))) {
-                return
+                return;
             }
 
             Logger.addEvent(Logger.EventType.pasteObject);
             if (this._shape.type === 'box') {
                 this._collection.add(object, `${this._shape.mode}_${this._shape.type}`);
-            }
-            else {
+            } else {
                 this._collection.add(object, `annotation_${this._shape.type}`);
             }
 
             // Undo/redo code
-            let model = this._collection.shapes.slice(-1)[0];
+            const model = this._collection.shapes.slice(-1)[0];
             window.cvat.addAction('Paste Object', () => {
                 model.removed = true;
                 model.unsubscribe(this._collection);
@@ -181,7 +184,7 @@ class ShapeBufferModel extends Listener  {
         if (this._shape.type && Number.isInteger(numOfFrames)) {
             let object = null;
             if (this._shape.type === 'box') {
-                let box = {
+                const box = {
                     xtl: this._shape.position.xtl,
                     ytl: this._shape.position.ytl,
                     xbr: this._shape.position.xbr,
@@ -197,21 +200,20 @@ class ShapeBufferModel extends Listener  {
                     count: numOfFrames,
                 });
 
-                let imageSizes = window.cvat.job.images;
-                let startFrame = window.cvat.player.frames.start;
-                let originalImageSize = imageSizes.frames[object.frame - startFrame] || imageSizes.frames[0];
+                const imageSizes = window.cvat.job.images;
+                const startFrame = window.cvat.player.frames.start;
+                const originalImageSize = imageSizes.frames[object.frame - startFrame] || imageSizes.frames[0];
 
                 // Getting normalized coordinates [0..1]
-                let normalized = {};
+                const normalized = {};
                 if (this._shape.type === 'box') {
                     normalized.xtl = object.xtl / originalImageSize.width;
                     normalized.ytl = object.ytl / originalImageSize.height;
                     normalized.xbr = object.xbr / originalImageSize.width;
                     normalized.ybr = object.ybr / originalImageSize.height;
-                }
-                else {
+                } else {
                     normalized.points = [];
-                    for (let point of PolyShapeModel.convertStringToNumberArray(object.points)) {
+                    for (const point of PolyShapeModel.convertStringToNumberArray(object.points)) {
                         normalized.points.push({
                             x: point.x / originalImageSize.width,
                             y: point.y / originalImageSize.height,
@@ -219,23 +221,22 @@ class ShapeBufferModel extends Listener  {
                     }
                 }
 
-                let addedObjects = [];
+                const addedObjects = [];
                 while (numOfFrames > 0 && (object.frame + 1 <= window.cvat.player.frames.stop)) {
-                    object.frame ++;
-                    numOfFrames --;
+                    object.frame++;
+                    numOfFrames--;
 
                     object.z_order = this._collection.zOrder(object.frame).max;
-                    let imageSize = imageSizes.frames[object.frame - startFrame] || imageSizes.frames[0];
-                    let position = {};
+                    const imageSize = imageSizes.frames[object.frame - startFrame] || imageSizes.frames[0];
+                    const position = {};
                     if (this._shape.type === 'box') {
                         position.xtl = normalized.xtl * imageSize.width;
                         position.ytl = normalized.ytl * imageSize.height;
                         position.xbr = normalized.xbr * imageSize.width;
                         position.ybr = normalized.ybr * imageSize.height;
-                    }
-                    else {
+                    } else {
                         position.points = [];
-                        for (let point of normalized.points) {
+                        for (const point of normalized.points) {
                             position.points.push({
                                 x: point.x * imageSize.width,
                                 y: point.y * imageSize.height,
@@ -250,17 +251,22 @@ class ShapeBufferModel extends Listener  {
 
                 if (addedObjects.length) {
                     // Undo/redo code
-                    window.cvat.addAction('Propagate Object', () => {
-                        for (let object of addedObjects) {
-                            object.removed = true;
-                            object.unsubscribe(this._collection);
-                        }
-                    }, () => {
-                        for (let object of addedObjects) {
-                            object.removed = false;
-                            object.subscribe(this._collection);
-                        }
-                    }, window.cvat.player.frames.current);
+                    window.cvat.addAction(
+                        'Propagate Object',
+                        () => {
+                            for (const object of addedObjects) {
+                                object.removed = true;
+                                object.unsubscribe(this._collection);
+                            }
+                        },
+                        () => {
+                            for (const object of addedObjects) {
+                                object.removed = false;
+                                object.subscribe(this._collection);
+                            }
+                        },
+                        window.cvat.player.frames.current,
+                    );
                     // End of undo/redo code
                 }
             }
@@ -284,36 +290,39 @@ class ShapeBufferModel extends Listener  {
     }
 }
 
-
 class ShapeBufferController {
+    /**
+     * @param {ShapeBufferModel} model
+     */
     constructor(model) {
         this._model = model;
         setupBufferShortkeys.call(this);
 
         function setupBufferShortkeys() {
-            let copyHandler = Logger.shortkeyLogDecorator(function() {
+            const copyHandler = Logger.shortkeyLogDecorator(() => {
                 this._model.copyToBuffer();
-            }.bind(this));
+            });
 
-            let switchHandler = Logger.shortkeyLogDecorator(function() {
+            const switchHandler = Logger.shortkeyLogDecorator(() => {
                 this._model.switchPaste();
-            }.bind(this));
+            });
 
             let propagateDialogShowed = false;
-            let propagateHandler = Logger.shortkeyLogDecorator(function() {
+            const propagateHandler = Logger.shortkeyLogDecorator(() => {
                 if (!propagateDialogShowed) {
                     blurAllElements();
+
                     if (this._model.copyToBuffer()) {
-                        let curFrame = window.cvat.player.frames.current;
-                        let startFrame = window.cvat.player.frames.start;
-                        let endFrame = Math.min(window.cvat.player.frames.stop, curFrame + this._model.propagateFrames);
-                        let imageSizes = window.cvat.job.images;
+                        const curFrame = window.cvat.player.frames.current;
+                        const startFrame = window.cvat.player.frames.start;
+                        const endFrame = Math.min(window.cvat.player.frames.stop, curFrame + this._model.propagateFrames);
+                        const imageSizes = window.cvat.job.images;
 
                         let message = `Propagate up to ${endFrame} frame. `;
-                        let refSize = imageSizes.frames[curFrame - startFrame] || imageSizes.frames[0];
-                        for (let _frame = curFrame + 1; _frame <= endFrame; _frame ++) {
-                            let size = imageSizes.frames[_frame - startFrame] || imageSizes.frames[0];
-                            if ((size.width != refSize.width) || (size.height != refSize.height) ) {
+                        const refSize = imageSizes.frames[curFrame - startFrame] || imageSizes.frames[0];
+                        for (let _frame = curFrame + 1; _frame <= endFrame; _frame++) {
+                            const size = imageSizes.frames[_frame - startFrame] || imageSizes.frames[0];
+                            if (size.width != refSize.width || size.height != refSize.height) {
                                 message += 'Some covered frames have another resolution. Shapes in them can differ from reference. ';
                                 break;
                             }
@@ -321,18 +330,22 @@ class ShapeBufferController {
                         message += 'Are you sure?';
 
                         propagateDialogShowed = true;
-                        userConfirm(message, () => {
-                            this._model.propagateToFrames();
-                            propagateDialogShowed = false;
-                        }, () => propagateDialogShowed = false);
+                        userConfirm(
+                            message,
+                            () => {
+                                this._model.propagateToFrames();
+                                propagateDialogShowed = false;
+                            },
+                            () => propagateDialogShowed = false,
+                        );
                     }
                 }
-            }.bind(this));
+            });
 
-            let shortkeys = window.cvat.config.shortkeys;
-            Mousetrap.bind(shortkeys["copy_shape"].value, copyHandler, 'keydown');
-            Mousetrap.bind(shortkeys["propagate_shape"].value, propagateHandler, 'keydown');
-            Mousetrap.bind(shortkeys["switch_paste"].value, switchHandler, 'keydown');
+            const { shortkeys } = window.cvat.config;
+            Mousetrap.bind(shortkeys.copy_shape.value, copyHandler, 'keydown');
+            Mousetrap.bind(shortkeys.propagate_shape.value, propagateHandler, 'keydown');
+            Mousetrap.bind(shortkeys.switch_paste.value, switchHandler, 'keydown');
         }
     }
 
@@ -353,9 +366,11 @@ class ShapeBufferController {
     }
 }
 
-
-
 class ShapeBufferView {
+    /**
+     * @param {ShapeBufferModel} model
+     * @param {ShapeBufferController} controller
+     */
     constructor(model, controller) {
         model.subscribe(this);
         this._controller = controller;
@@ -367,21 +382,21 @@ class ShapeBufferView {
 
         this._controller.propagateFrames = +this._propagateFramesInput.prop('value');
         this._propagateFramesInput.on('change', (e) => {
-            let value = Math.clamp(+e.target.value, +e.target.min, +e.target.max);
+            const value = Math.clamp(+e.target.value, +e.target.min, +e.target.max);
             e.target.value = value;
             this._controller.propagateFrames = value;
         });
     }
 
     _drawShapeView() {
-        let scale = window.cvat.player.geometry.scale;
-        let points = this._shape.position.points ?
-            window.cvat.translate.points.actualToCanvas(this._shape.position.points) : null;
+        const { scale } = window.cvat.player.geometry;
+        let points = this._shape.position.points
+            ? window.cvat.translate.points.actualToCanvas(this._shape.position.points) : null;
 
         switch (this._shape.type) {
         case 'box': {
-            let width = this._shape.position.xbr - this._shape.position.xtl;
-            let height = this._shape.position.ybr - this._shape.position.ytl;
+            const width = this._shape.position.xbr - this._shape.position.xtl;
+            const height = this._shape.position.ybr - this._shape.position.ytl;
             this._shape.position = window.cvat.translate.box.actualToCanvas(this._shape.position);
             this._shapeView = this._frameContent.rect(width, height)
                 .move(this._shape.position.xtl, this._shape.position.ytl).addClass('shapeCreation').attr({
@@ -397,32 +412,49 @@ class ShapeBufferView {
         case 'cuboid':
             points = window.cvat.translate.points.canvasToActual(points);
             points = PolylineModel.convertStringToNumberArray(points);
-            let view_model = new Cuboid2PointViewModel(points);
-            this._shapeView = this._frameContent.polyline(points).addClass('shapeCreation').attr({
-                'stroke-width': 0,
-            });
+            const view_model = new Cuboid2PointViewModel(points);
+            this._shapeView = this._frameContent
+                .polyline(points)
+                .addClass('shapeCreation')
+                .attr({
+                    'stroke-width': 0,
+                });
 
-            this._shapeViewGroup = this._frameContent.cube(view_model).addClass('shapeCreation').attr({
-                'stroke-width': STROKE_WIDTH / scale,
-            });
+            this._shapeViewGroup = this._frameContent
+                .cube(view_model)
+                .addClass('shapeCreation')
+                .attr({
+                    'stroke-width': STROKE_WIDTH / scale,
+                });
 
             break;
         case 'polyline':
-            this._shapeView = this._frameContent.polyline(points).addClass('shapeCreation').attr({
-                'stroke-width': STROKE_WIDTH / scale,
-            });
+            this._shapeView = this._frameContent
+                .polyline(points)
+                .addClass('shapeCreation')
+                .attr({
+                    'stroke-width': STROKE_WIDTH / scale,
+                });
             break;
         case 'points':
-            this._shapeView = this._frameContent.polyline(points).addClass('shapeCreation').attr({
-                'stroke-width': 0,
-            });
+            this._shapeView = this._frameContent
+                .polyline(points)
+                .addClass('shapeCreation')
+                .attr({
+                    'stroke-width': 0,
+                });
 
             this._shapeViewGroup = this._frameContent.group();
-            for (let point of PolyShapeModel.convertStringToNumberArray(points)) {
-                let radius = POINT_RADIUS * 2 / window.cvat.player.geometry.scale;
-                let scaledStroke = STROKE_WIDTH / window.cvat.player.geometry.scale;
-                this._shapeViewGroup.circle(radius).move(point.x - radius / 2, point.y - radius / 2)
-                    .fill('white').stroke('black').attr('stroke-width', scaledStroke).addClass('pasteTempMarker');
+            for (const point of PolyShapeModel.convertStringToNumberArray(points)) {
+                const radius = POINT_RADIUS * 2 / window.cvat.player.geometry.scale;
+                const scaledStroke = STROKE_WIDTH / window.cvat.player.geometry.scale;
+                this._shapeViewGroup
+                    .circle(radius)
+                    .move(point.x - radius / 2, point.y - radius / 2)
+                    .fill('white')
+                    .stroke('black')
+                    .attr('stroke-width', scaledStroke)
+                    .addClass('pasteTempMarker');
             }
             break;
         default:
@@ -430,16 +462,16 @@ class ShapeBufferView {
         }
 
         this._shapeView.attr({
-            'z_order': Number.MAX_SAFE_INTEGER,
+            z_order: Number.MAX_SAFE_INTEGER,
         });
     }
 
     _moveShapeView(pos) {
-        let rect = this._shapeView.node.getBBox();
+        const rect = this._shapeView.node.getBBox();
 
         this._shapeView.move(pos.x - rect.width / 2, pos.y - rect.height / 2);
         if (this._shapeViewGroup) {
-            let rect = this._shapeViewGroup.node.getBBox();
+            const rect = this._shapeViewGroup.node.getBBox();
             this._shapeViewGroup.move(pos.x - rect.x - rect.width / 2, pos.y - rect.y - rect.height / 2);
         }
     }
@@ -455,7 +487,7 @@ class ShapeBufferView {
 
     _enableEvents() {
         this._frameContent.on('mousemove.buffer', (e) => {
-            let pos = window.cvat.translate.point.clientToCanvas(this._frameContent.node, e.clientX, e.clientY);
+            const pos = window.cvat.translate.point.clientToCanvas(this._frameContent.node, e.clientX, e.clientY);
             this._shapeView.style('visibility', '');
             this._moveShapeView(pos);
         });
@@ -464,12 +496,12 @@ class ShapeBufferView {
             if (e.which != 1) return;
             if (this._shape.type != 'box') {
                 let actualPoints = window.cvat.translate.points.canvasToActual(this._shapeView.attr('points'));
-                let frameWidth = window.cvat.player.geometry.frameWidth;
-                let frameHeight = window.cvat.player.geometry.frameHeight;
+                const { frameWidth } = window.cvat.player.geometry;
+                const { frameHeight } = window.cvat.player.geometry;
 
                 if (this.clipToFrame) {
                     actualPoints = PolyShapeModel.convertStringToNumberArray(actualPoints);
-                    for (let point of actualPoints) {
+                    for (const point of actualPoints) {
                         point.x = Math.clamp(point.x, 0, frameWidth);
                         point.y = Math.clamp(point.y, 0, frameHeight);
                     }
@@ -480,24 +512,22 @@ class ShapeBufferView {
                 this._shapeView.attr('points', window.cvat.translate.points.actualToCanvas(actualPoints));
 
                 // Get an updated bounding box for check it area
-                let polybox = this._shapeView.node.getBBox();
-                let w = polybox.width;
-                let h = polybox.height;
-                let area = w * h;
-                let type = this._shape.type;
+                const polybox = this._shapeView.node.getBBox();
+                const w = polybox.width;
+                const h = polybox.height;
+                const area = w * h;
+                const { type } = this._shape;
 
                 if (area >= AREA_TRESHOLD || type === 'points' || type === 'polyline' && (w >= AREA_TRESHOLD || h >= AREA_TRESHOLD)) {
                     this._controller.pasteToFrame(e, null, actualPoints);
-                }
-                else {
+                } else {
                     this._controller.pasteToFrame(e, null, null);
                 }
-            }
-            else {
-                let frameWidth = window.cvat.player.geometry.frameWidth;
-                let frameHeight = window.cvat.player.geometry.frameHeight;
-                let rect = window.cvat.translate.box.canvasToActual(this._shapeView.node.getBBox());
-                let box = {};
+            } else {
+                const { frameWidth } = window.cvat.player.geometry;
+                const { frameHeight } = window.cvat.player.geometry;
+                const rect = window.cvat.translate.box.canvasToActual(this._shapeView.node.getBBox());
+                const box = {};
                 box.xtl = Math.clamp(rect.x, 0, frameWidth);
                 box.ytl = Math.clamp(rect.y, 0, frameHeight);
                 box.xbr = Math.clamp(rect.x + rect.width, 0, frameWidth);
@@ -505,8 +535,7 @@ class ShapeBufferView {
 
                 if ((box.xbr - box.xtl) * (box.ybr - box.ytl) >= AREA_TRESHOLD) {
                     this._controller.pasteToFrame(e, box, null);
-                }
-                else {
+                } else {
                     this._controller.pasteToFrame(e, null, null);
                 }
             }
@@ -528,12 +557,9 @@ class ShapeBufferView {
             this._shape = buffer.shape;
             this._drawShapeView();
             this._enableEvents();
-        }
-        else {
-            if (this._shapeView) {
-                this._disableEvents();
-                this._removeShapeView();
-            }
+        } else if (this._shapeView) {
+            this._disableEvents();
+            this._removeShapeView();
         }
     }
 
@@ -542,8 +568,7 @@ class ShapeBufferView {
             this._pasteMode = true;
             this._shape = buffer.shape;
             this.enableMouseEvents();
-        }
-        else if (!buffer.pasteMode) {
+        } else if (!buffer.pasteMode) {
             this.disableMouseEvents();
             if (this._viewShape) {
                 this._viewShape.remove();

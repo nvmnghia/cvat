@@ -1,3 +1,4 @@
+/* eslint-disable no-multiple-empty-lines */
 /*
  * Copyright (C) 2018-2019 Intel Corporation
  *
@@ -15,6 +16,9 @@
 */
 
 class FrameProviderWrapper extends Listener {
+    /**
+     * @param {number} stop ID of the final frame.
+     */
     constructor(stop) {
         super('onFrameLoad', () => this._loaded);
 
@@ -90,6 +94,10 @@ const MAX_PLAYER_SCALE = 10;
 const MIN_PLAYER_SCALE = 0.1;
 
 class PlayerModel extends Listener {
+    /**
+     * @param {Object} task Task information object.
+     * @param {{width: number, height: number}} playerSize Size of player DOM element.
+     */
     constructor(task, playerSize) {
         super('onPlayerUpdate', () => this);
         this._frame = {
@@ -129,10 +137,15 @@ class PlayerModel extends Listener {
             rotation: 0,
         };
         this._framewiseRotation = {};
-        const frameOffset = Math.max((playerSize.height - MIN_PLAYER_SCALE) / MIN_PLAYER_SCALE,
-            (playerSize.width - MIN_PLAYER_SCALE) / MIN_PLAYER_SCALE);
+
+        // TODO: offset WTF?
+        const frameOffset = Math.max(
+            (playerSize.height - MIN_PLAYER_SCALE) / MIN_PLAYER_SCALE,
+            (playerSize.width - MIN_PLAYER_SCALE) / MIN_PLAYER_SCALE,
+        );
         this._geometry.frameOffset = Math.floor(frameOffset);
         window.cvat.translate.playerOffset = this._geometry.frameOffset;
+
         window.cvat.player.rotation = this._geometry.rotation;
 
         this._frameProvider.subscribe(this);
@@ -452,6 +465,12 @@ class PlayerModel extends Listener {
 
 
 class PlayerController {
+    /**
+     * @param {PlayerModel} playerModel
+     * @param {Function} activeTrack Function to get active shape.
+     * @param {Function} find
+     * @param {{width:number, height: number, top: number, left: number}} playerOffset
+     */
     constructor(playerModel, activeTrack, find, playerOffset) {
         this._model = playerModel;
         this._find = find;
@@ -882,23 +901,47 @@ class PlayerView {
         this._frameNumber.attr('title', `
             ${shortkeys.focus_to_frame.view_value} - ${shortkeys.focus_to_frame.description}`);
 
-        this._nextButtonUI.find('polygon').append($(document.createElementNS('http://www.w3.org/2000/svg', 'title'))
-            .html(`${shortkeys.next_frame.view_value} - ${shortkeys.next_frame.description}`));
+        this._nextButtonUI
+            .find('polygon')
+            .append(
+                $(document.createElementNS('http://www.w3.org/2000/svg', 'title'))
+                    .html(`${shortkeys.next_frame.view_value} - ${shortkeys.next_frame.description}`)
+            );
 
-        this._prevButtonUI.find('polygon').append($(document.createElementNS('http://www.w3.org/2000/svg', 'title'))
-            .html(`${shortkeys.prev_frame.view_value} - ${shortkeys.prev_frame.description}`));
+        this._prevButtonUI
+            .find('polygon')
+            .append(
+                $(document.createElementNS('http://www.w3.org/2000/svg', 'title'))
+                    .html(`${shortkeys.prev_frame.view_value} - ${shortkeys.prev_frame.description}`)
+            );
 
-        this._playButtonUI.find('polygon').append($(document.createElementNS('http://www.w3.org/2000/svg', 'title'))
-            .html(`${shortkeys.play_pause.view_value} - ${shortkeys.play_pause.description}`));
+        this._playButtonUI
+            .find('polygon')
+            .append(
+                $(document.createElementNS('http://www.w3.org/2000/svg', 'title'))
+                    .html(`${shortkeys.play_pause.view_value} - ${shortkeys.play_pause.description}`)
+            );
 
-        this._pauseButtonUI.find('polygon').append($(document.createElementNS('http://www.w3.org/2000/svg', 'title'))
-            .html(`${shortkeys.play_pause.view_value} - ${shortkeys.play_pause.description}`));
+        this._pauseButtonUI
+            .find('polygon')
+            .append(
+                $(document.createElementNS('http://www.w3.org/2000/svg', 'title'))
+                    .html(`${shortkeys.play_pause.view_value} - ${shortkeys.play_pause.description}`)
+            );
 
-        this._multipleNextButtonUI.find('polygon').append($(document.createElementNS('http://www.w3.org/2000/svg', 'title'))
-            .html(`${shortkeys.forward_frame.view_value} - ${shortkeys.forward_frame.description}`));
+        this._multipleNextButtonUI
+            .find('polygon')
+            .append(
+                $(document.createElementNS('http://www.w3.org/2000/svg', 'title'))
+                    .html(`${shortkeys.forward_frame.view_value} - ${shortkeys.forward_frame.description}`)
+            );
 
-        this._multiplePrevButtonUI.find('polygon').append($(document.createElementNS('http://www.w3.org/2000/svg', 'title'))
-            .html(`${shortkeys.backward_frame.view_value} - ${shortkeys.backward_frame.description}`));
+        this._multiplePrevButtonUI
+            .find('polygon')
+            .append(
+                $(document.createElementNS('http://www.w3.org/2000/svg', 'title'))
+                    .html(`${shortkeys.backward_frame.view_value} - ${shortkeys.backward_frame.description}`)
+            );
 
 
         this._contextMenuUI.click((e) => {
@@ -925,10 +968,14 @@ class PlayerView {
             if (!window.cvat.mode) {
                 $('.custom-menu').hide(100);
                 this._contextMenuUI.finish().show(100);
-                const x = Math.min(e.pageX, this._playerUI[0].offsetWidth
-                    - this._contextMenuUI[0].scrollWidth);
-                const y = Math.min(e.pageY, this._playerUI[0].offsetHeight
-                    - this._contextMenuUI[0].scrollHeight);
+                const x = Math.min(
+                    e.pageX,
+                    this._playerUI[0].offsetWidth - this._contextMenuUI[0].scrollWidth,
+                );
+                const y = Math.min(
+                    e.pageY,
+                    this._playerUI[0].offsetHeight - this._contextMenuUI[0].scrollHeight,
+                );
                 this._contextMenuUI.offset({
                     left: x,
                     top: y,
