@@ -1,3 +1,4 @@
+/* eslint-disable no-multi-spaces */
 /*
  * Copyright (C) 2018 Intel Corporation
  *
@@ -51,8 +52,8 @@ class AnnotationSaverModel extends Listener {
 
     _resetState() {
         this._initialObjects = {
-            shapes: {},
-            tracks: {},
+            shapes: {},    // Raw shape data created in annotation mode, keyed with shape id.
+            tracks: {},    // Raw shape data created in tracking mode, keyed with shape id.
         };
     }
 
@@ -337,6 +338,9 @@ class AnnotationSaverModel extends Listener {
         }, 1000);
     }
 
+    /**
+     * Get a clone of this._state
+     */
     get state() {
         return JSON.parse(JSON.stringify(this._state));
     }
