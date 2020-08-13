@@ -55,13 +55,23 @@ class ShapeCollectionModel extends Listener {
         this._shapes = [];
 
         this._showAllInterpolation = false;
+
+        /** @type {{model: ShapeModel, interpolation: ShapeInFrame}} */
         this._currentShapes = [];
+
         this._idx = 0;
         this._groupIdx = 0;
         this._frame = null;
         this._activeShape = null;
         this._flush = false;
+
+        /**
+         * Last position of the mouse, in canvas coordinate.
+         *
+         *  @type {SVGPoint}
+         */
         this._lastPos = { x: 0, y: 0 };
+
         this._z_order = { max: 0, min: 0 };
 
         /** @type {string[]} */
@@ -304,7 +314,10 @@ class ShapeCollectionModel extends Listener {
      * Export data from ShapeCollectionModel to server format.
      * Mostly it's the reverse of import().
      *
-     * @returns {Object[]} Array of 2 objects: the first one is
+     * @returns {Object[]} Array of 2 objects:
+     *                       - 1st object: raw shape data, similar to import()'s input argument.
+     *                       - 2nd object: array of [Object, ShapeModel] pair, the Object
+     *                         is a raw shape data object included in the 1st object.
      */
     export() {
         function _convertShape(shape) {
@@ -326,8 +339,8 @@ class ShapeCollectionModel extends Listener {
         }
 
         const data = {
-            shapes: [],
-            tracks: [],
+            shapes: [],    // Array of raw shape data created in annotation mode.
+            tracks: [],    // Array of raw shape data created in tracking mode.
         };
 
         const mapping = [];
@@ -459,6 +472,19 @@ class ShapeCollectionModel extends Listener {
         return model;
     }
 
+    /**
+     * Given a position in the canvas, select a shape containing that position (if there is one).
+     * Open shapes (polyline, points) is preferred over closed shapes (the rest).
+     * This function is called whenever the mouse moves in the player frame.
+     * A shape is selected but not activated by hovering the mouse over it, hence
+     * the noActivation option. The shape is activated only if it is clicked.
+     * If noActivation is true, the selected shape's model is returned. Otherwise,
+     * this._activeShape is updated with the shape, and nothing is returned.
+     *
+     * @param {SVGPoint} pos Position (of the mouse) in canvas coordinate.
+     * @param {boolean} noActivation Do not activate the shape.
+     * @returns {ShapeModel} A model of the selected shape. Only returns if noActivation is true.
+     */
     selectShape(pos, noActivation) {
         const closedShape = {
             minDistance: Number.MAX_SAFE_INTEGER,
@@ -473,6 +499,7 @@ class ShapeCollectionModel extends Listener {
         for (const shape of this._currentShapes) {
             if (shape.model.hiddenShape) continue;
             if (shape.model.removed) continue;
+
             switch (shape.model.type.split('_')[1]) {
             case 'box':
             case 'polygon':
@@ -520,6 +547,9 @@ class ShapeCollectionModel extends Listener {
         this._interpolate();
     }
 
+    /**
+     * Deselect active shape.
+     */
     resetActive() {
         if (this._activeShape) {
             this._activeShape.active = false;
@@ -552,6 +582,11 @@ class ShapeCollectionModel extends Listener {
         }
     }
 
+    /**
+     * Callback used to receive update from ShapeModel.
+     *
+     * @param {ShapeModel} model A shape model.
+     */
     onShapeUpdate(model) {
         switch (model.updateReason) {
         case 'activeAttribute':
@@ -1154,6 +1189,8 @@ class ShapeCollectionController {
 
         let getChildPosition;
         let typeOfShape;
+
+        // TODO: Move this whole if-else block to individual ShapeModel.
         if (activeShape instanceof BoxModel) {
             const {
                 xtl, ytl, xbr, ybr,
@@ -1226,14 +1263,14 @@ class ShapeCollectionController {
 
             // Then populate the 2 side edges
             // Yes edge points are reassigned along the way, for better code visibility.
-            const rightEdge = interpolatePoints(points[0][lastCol], points[lastRow][lastCol], row - 1);
+            const rightEdge = linearInterpolatePoints(points[0][lastCol], points[lastRow][lastCol], row - 1);
             for (let i = 0; i < rightEdge.length; i++) points[i][lastCol] = rightEdge[i];
-            const leftEdge = interpolatePoints(points[0][0], points[lastRow][0], row - 1);
+            const leftEdge = linearInterpolatePoints(points[0][0], points[lastRow][0], row - 1);
             for (let i = 0; i < leftEdge.length; i++) points[i][0] = leftEdge[i];
 
             // Then fill the inside
             for (let i = 0; i <= lastRow; i++) {
-                const line = interpolatePoints(points[i][0], points[i][lastCol], col - 1);
+                const line = linearInterpolatePoints(points[i][0], points[i][lastCol], col - 1);
                 for (let j = 0; j <= lastCol; j++) {
                     points[i][j] = line[j];
                 }
@@ -1347,7 +1384,7 @@ class ShapeCollectionController {
          * @returns {Array.<{x: number, y: number}>} Generated points, including p1 and p2,
          *                                           so that its length is numOfPoints + 2.
          */
-        function interpolatePoints(p1, p2, numOfPoints) {
+        function linearInterpolatePoints(p1, p2, numOfPoints) {
             const x_step = (p2.x - p1.x - numOfPoints * SPACING) / (numOfPoints + 1);
             const y_step = (p2.y - p1.y - numOfPoints * SPACING) / (numOfPoints + 1);
 
@@ -1409,14 +1446,31 @@ class ShapeCollectionController {
         this._model.split();
     }
 
+    /**
+     * Given the position in the canvas, select a shape containing that position.
+     * The position provided is mouse position, converted to canvas coordinate.
+     *
+     * @param {SVGPoint} pos Position in the canvas.
+     * @param {boolean} noActivation Do not activate the shape.
+     *                               When the mouse moves around, a shape may be selected, but not activated.
+     *                               The shape is activated only if it is clicked.
+     */
     selectShape(pos, noActivation) {
         this._model.selectShape(pos, noActivation);
     }
 
+    /**
+     * Deselect active shape.
+     */
     resetActive() {
         this._model.resetActive();
     }
 
+    /**
+     * Set last position as the current mouse position, in canvas coordinate.
+     *
+     * @param {SVGPoint} pos The current mouse position.
+     */
     setLastPosition(pos) {
         this._model.lastPosition = pos;
     }
@@ -1439,6 +1493,11 @@ class ShapeCollectionController {
 }
 
 class ShapeCollectionView {
+    /**
+     *
+     * @param {ShapeCollectionModel} collectionModel
+     * @param {ShapeCollectionController} collectionController
+     */
     constructor(collectionModel, collectionController) {
         collectionModel.subscribe(this);
         this._controller = collectionController;
@@ -1566,8 +1625,7 @@ class ShapeCollectionView {
                 return;
             }
 
-            const { frameHeight } = window.cvat.player.geometry;
-            const { frameWidth } = window.cvat.player.geometry;
+            const { frameWidth, frameHeight } = window.cvat.player.geometry;
             const pos = window.cvat.translate.point.clientToCanvas(this._frameBackground[0], e.clientX, e.clientY);
             if (pos.x >= 0 && pos.y >= 0 && pos.x <= frameWidth && pos.y <= frameHeight) {
                 if (!window.cvat.mode) {
@@ -1775,8 +1833,8 @@ class ShapeCollectionView {
         /**
          * Ask user the number of row and column to split.
          *
-         * @param {boolean} splitIntoRow                          Split into row or not.
-         * @param {boolean} splitIntoCol                          Split into column or not.
+         * @param {boolean} splitIntoRow Split into row or not.
+         * @param {boolean} splitIntoCol Split into column or not.
          * @param {ShapeCollectionController~splitActiveBox} onOK Callback to split box.
          */
         function dialogSplitBox(splitIntoRow, splitIntoCol, onOK) {
@@ -1869,7 +1927,7 @@ class ShapeCollectionView {
     }
 
     /**
-     * Update collection. This object subscribes to a ShapeCollectionModel, which call this function to notify this object.
+     * Callback used to receive update from ShapeCollectionModel.
      * The ShapeCollectionModel (the publisher) is modified here. The _frameContent and _UIContent is detached, but not deleted,
      * so subsequent calls can continue to update it and finally attach (append()) it when appropriate.
      *
@@ -1987,6 +2045,11 @@ class ShapeCollectionView {
         }
     }
 
+    /**
+     * Callback for ShapeView.
+     *
+     * @param {ShapeView} view View of the updated shape.
+     */
     onShapeViewUpdate(view) {
         switch (view.updateReason) {
         case 'drag':

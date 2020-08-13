@@ -24,6 +24,9 @@
 */
 
 class ShapeCreatorModel extends Listener {
+    /**
+     * @param {ShapeCollectionModel} shapeCollection
+     */
     constructor(shapeCollection) {
         super('onShapeCreatorUpdate', () => this);
         this._createMode = false;
@@ -102,7 +105,10 @@ class ShapeCreatorModel extends Listener {
     }
 
     /**
-     * When the user press N, the UI switch to Create mode.
+     * Switch UI to/from Create mode.
+     *
+     * @param {boolean} forceClose Close Create mode.
+     * @param {boolean} usingShortkey Use short key (pressing N).
      */
     switchCreateMode(forceClose, usingShortkey) {
         this._usingShortkey = usingShortkey;
@@ -171,6 +177,9 @@ class ShapeCreatorModel extends Listener {
 }
 
 class ShapeCreatorController {
+    /**
+     * @param {ShapeCreatorModel} drawerModel
+     */
     constructor(drawerModel) {
         this._model = drawerModel;
         setupShortkeys.call(this);
@@ -186,6 +195,12 @@ class ShapeCreatorController {
         }
     }
 
+    /**
+     * Switch to/from Create mode.
+     *
+     * @param {boolean} force Close Create mode.
+     * @param {boolean} [usingShortkey] Use short key (pressing N).
+     */
     switchCreateMode(force, usingShortkey = false) {
         this._model.switchCreateMode(force, usingShortkey);
     }
@@ -223,6 +238,10 @@ class ShapeCreatorController {
 }
 
 class ShapeCreatorView {
+    /**
+     * @param {ShapeCreatorModel} drawerModel
+     * @param {ShapeCreatorController} drawerController
+     */
     constructor(drawerModel, drawerController) {
         drawerModel.subscribe(this);
         this._controller = drawerController;
@@ -940,18 +959,22 @@ class ShapeCreatorView {
     _drawAim() {
         if (!(this._aim)) {
             this._aim = {
-                x: this._frameContent.line(0, this._aimCoord.y, this._frameContent.node.clientWidth, this._aimCoord.y)
+                x: this._frameContent
+                    .line(0, this._aimCoord.y, this._frameContent.node.clientWidth, this._aimCoord.y)
                     .attr({
                         'stroke-width': STROKE_WIDTH / this._scale,
                         stroke: 'red',
                         z_order: Number.MAX_SAFE_INTEGER,
-                    }).addClass('aim'),
-                y: this._frameContent.line(this._aimCoord.x, 0, this._aimCoord.x, this._frameContent.node.clientHeight)
+                    })
+                    .addClass('aim'),
+                y: this._frameContent
+                    .line(this._aimCoord.x, 0, this._aimCoord.x, this._frameContent.node.clientHeight)
                     .attr({
                         'stroke-width': STROKE_WIDTH / this._scale,
                         stroke: 'red',
                         z_order: Number.MAX_SAFE_INTEGER,
-                    }).addClass('aim'),
+                    })
+                    .addClass('aim'),
             };
         }
     }

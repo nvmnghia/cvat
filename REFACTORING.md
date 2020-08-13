@@ -6,8 +6,6 @@ Log & notes when adding splitting functionality in CVAT.
 
 All major objects have `Model`, `Controller` (each receives `Model`) and `View` (each receives both a `Controller` and a `Model`).
 
-Many `Model` subscribe to their `View`.
-
 When open the UI, the `buildAnnotationUI()` is called. In that function, there's a notable line:
 
 ```js
@@ -21,6 +19,8 @@ Shapes in an interpolated series are treated as one shape, and the position is c
 ### 1.1. Notification chain
 
 Note that the `A.subscribe(B)` in the source code stands for `A adds B as a listener`, or shorter `B subscribes A`. This choice of name is crazy.
+
+Many `View`s subscribe to their `Model`s.
 
 The below graph illustrates a simplified chain of notification. The notation `A --func--> B` means `A` notifies `B` by calling `B.func()`.
 
@@ -44,7 +44,7 @@ on('drawstop') -> ShapeCreatorController::finish() -> ShapeCreatorModel::finish(
 
 ### 2.2. Removing shape
 
-Removing a shape is as simple as setting the `removed` attribute of the shape. The actual removal happens after a chain of callbacks, though the removed model can be retained in a unknown manner.
+Removing a shape is as simple as setting the `removed` attribute of the shape. The actual removal happens after a chain of callbacks, though the removed model is retained for undo/redo in a closure.
 
 When the user presses <kbd>Del</kbd>, the following chain is called:
 

@@ -81,7 +81,7 @@ const TEXT_MARGIN = 10;
  * @property {number} xbr
  * @property {number} ybr
  * @property {boolean} occluded
- * @property {boolean} outside Is the shape outside the view?
+ * @property {boolean} outside Is the shape outside of the view?
  * @property {number} z_order
  */
 
@@ -209,7 +209,7 @@ class ShapeModel extends Listener {
      * an object containing attribute name and value.
      *
      * @param {number} frame Frame number.
-     * @returns {Object.<number, AttrNameVal>} Dict of SimpleAttribute keyed with attribute ID.
+     * @returns {Object.<number, AttrNameVal>} Dict of AttrNameVal keyed with attribute ID.
      */
     _interpolateAttributes(frame) {
         const { labelsInfo } = window.cvat;
@@ -329,11 +329,18 @@ class ShapeModel extends Listener {
         return counter;
     }
 
+    /**
+     * @param {string} updateReason Update reasons:
+     *     attributes, activation, changelabel, color, click, occluded,
+     *     lock, hidden, outside, keyframe, selection, z_order, remove,
+     *     activeAttribute, merge, grouping, position, draggable
+     */
     notify(updateReason) {
         if (updateReason !== 'activation') {
             // eslint-disable-next-line no-unused-vars
             const what = 1;
         }
+
         const oldReason = this._updateReason;
         this._updateReason = updateReason;
         try {
@@ -676,6 +683,11 @@ class ShapeModel extends Listener {
         return this._hiddenText;
     }
 
+    /**
+     * Set active status.
+     *
+     * @param {boolean} value Active status.
+     */
     set active(value) {
         this._active = value;
         if (!this._removed && !['drag', 'resize'].includes(window.cvat.mode)) {
@@ -777,29 +789,31 @@ class BoxModel extends ShapeModel {
      *
      * @param {Object} data     Raw shape data.
      * @param {string} type     Shape type string, of the following format:
-     *                            {annotation_mode}_{shape_type}
+     *                            {annotation_mode}_box
      * @param {number} clientID Client side ID?
      * @param {string} color    Color code.
      */
     constructor(data, type, clientID, color) {
         super(data, data.shapes || [], type, clientID, color);
+
+        /** @type {Object.<number, Position>} */
         this._positions = BoxModel.importPositions.call(this, data.shapes || data);
+
         this._setupKeyFrames();
     }
 
     /**
-     * Given the frame number, return the position of the shape in that frame.
+     * Given the frame number, return the position of the box in that frame.
+     * Position is interpolated when needed (contain(), distance()), instead of being cached.
      *
      * @param {number} frame Frame number.
-     * @returns {Position} Position of the shape in that frame.
+     * @returns {ShapePosition} Position of the box in that frame.
      */
     _interpolatePosition(frame) {
         if (this._type.startsWith('annotation')) {
             return Object.assign({},
                 this._positions[this._frame],
-                {
-                    outside: this._frame != frame,
-                });
+                { outside: this._frame != frame });
         }
 
         let [leftFrame, rightFrame] = this._neighboringFrames(frame);
@@ -815,14 +829,12 @@ class BoxModel extends ShapeModel {
 
         if (!leftPos) {
             if (rightPos) {
-                return Object.assign({}, rightPos, {
-                    outside: true,
-                });
+                return Object.assign({},
+                    rightPos,
+                    { outside: true });
             }
 
-            return {
-                outside: true,
-            };
+            return { outside: true };
         }
 
         if (frame === leftFrame || leftPos.outside || !rightPos || rightPos.outside) {
@@ -893,39 +905,72 @@ class BoxModel extends ShapeModel {
         }
     }
 
+    /**
+     * Given a position in the canvas and frame number, check if it is inside the box.
+     *
+     * @param {SVGPoint} mousePos Position (of the mouse) in canvas coordinate.
+     * @param {number} frame Frame number.
+     * @returns {boolean} Whether mousePos is inside the box or not.
+     */
     contain(mousePos, frame) {
         const pos = this._interpolatePosition(frame);
         if (pos.outside) return false;
-        const { x } = mousePos;
-        const { y } = mousePos;
-        return (x >= pos.xtl && x <= pos.xbr && y >= pos.ytl && y <= pos.ybr);
+        const { x, y } = mousePos;
+        return x >= pos.xtl && x <= pos.xbr && y >= pos.ytl && y <= pos.ybr;
     }
 
+    /**
+     * Given a position in the canvas and frame number, find the minimum
+     * distance to an edge of the box.
+     *
+     * @param {SVGPoint} mousePos Position (of the mouse) in canvas coordinate.
+     * @param {number} frame Frame number.
+     * @returns {number} Minimum distance to an edge of the box.
+     */
     distance(mousePos, frame) {
         const pos = this._interpolatePosition(frame);
-        if (pos.outside) return Number.MAX_SAFE_INTEGER;
-        const points = [{ x: pos.xtl, y: pos.ytl }, { x: pos.xbr, y: pos.ytl }, { x: pos.xbr, y: pos.ybr }, { x: pos.xtl, y: pos.ybr }];
-        let minDistance = Number.MAX_SAFE_INTEGER;
-        for (let i = 0; i < points.length; i++) {
-            const p1 = points[i];
-            const p2 = points[i + 1] || points[0];
+        if (pos.outside) {
+            return Number.MAX_SAFE_INTEGER;
+        }
 
-            // perpendicular from point to straight length
-            const distance = (Math.abs((p2.y - p1.y) * mousePos.x - (p2.x - p1.x) * mousePos.y + p2.x * p1.y - p2.y * p1.x))
-                / Math.sqrt(Math.pow(p2.y - p1.y, 2) + Math.pow(p2.x - p1.x, 2));
+        const corners = [
+            { x: pos.xtl, y: pos.ytl },
+            { x: pos.xbr, y: pos.ytl },
+            { x: pos.xbr, y: pos.ybr },
+            { x: pos.xtl, y: pos.ybr },
+        ];
+        let minDistance = Number.MAX_SAFE_INTEGER;
+        const { x, y } = mousePos;
+
+        for (let i = 0; i < corners.length; i++) {
+            const c1 = corners[i];
+            const c2 = corners[i + 1] || corners[0];
+
+            // Distance from pos to line p1p2
+            const distance = Math.abs((c2.y - c1.y) * x - (c2.x - c1.x) * y + c2.x * c1.y - c2.y * c1.x)
+                / Math.sqrt((c2.y - c1.y) ** 2 + (c2.x - c1.x) ** 2);
 
             // check if perpendicular belongs to the straight segment
-            const a = Math.pow(p1.x - mousePos.x, 2) + Math.pow(p1.y - mousePos.y, 2);
-            const b = Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2);
-            const c = Math.pow(p2.x - mousePos.x, 2) + Math.pow(p2.y - mousePos.y, 2);
-            if (distance < minDistance && (a + b - c) >= 0 && (c + b - a) >= 0) {
-                minDistance = distance;
+            const a = (c1.x - x) ** 2    + (c1.y - y) ** 2;        // Squared distance between p1 and pos
+            const b = (c2.x - c1.x) ** 2 + (c2.y - c1.y) ** 2;     // Squared distance between p2 and p1
+            const c = (c2.x - x) ** 2    + (c2.y - y) ** 2;        // Squared distance between p2 and pos
+            if (distance < minDistance && (a + b - c) >= 0 && (c + b - a) >= 0) {    // Aren't the last 2 conditions
+                minDistance = distance;                                              // always true?
             }
         }
+
         return minDistance;
     }
 
+    /**
+     * Export the model.
+     * Mostly it's the reverse of several import functions in the constructors.
+     *
+     * @returns {Object} Raw shape data. Should be of the same structure
+     *                   as the data parameter passed to the constructor.
+     */
     export() {
+        /** @type {AttrIdVal[]} */
         const objectAttributes = [];
         for (const attributeId in this._attributes.immutable) {
             objectAttributes.push({
@@ -944,14 +989,17 @@ class BoxModel extends ShapeModel {
                 }
             }
 
-            return Object.assign({}, {
-                id: this._serverID,
-                attributes: objectAttributes,
-                label_id: this._label,
-                group: this._groupId,
-                frame: this._frame,
-                type: 'box',
-            }, this._positions[this._frame]);
+            return Object.assign(
+                {
+                    id: this._serverID,
+                    attributes: objectAttributes,
+                    label_id: this._label,
+                    group: this._groupId,
+                    frame: this._frame,
+                    type: 'box',
+                },
+                this._positions[this._frame],
+            );
         }
 
         const track = {
@@ -974,11 +1022,14 @@ class BoxModel extends ShapeModel {
                 }
             }
 
-            track.shapes.push(Object.assign({}, {
-                frame: +frame,
-                type: 'box',
-                attributes: shapeAttributes,
-            }, this._positions[frame]));
+            track.shapes.push(Object.assign(
+                {
+                    frame: +frame,
+                    type: 'box',
+                    attributes: shapeAttributes,
+                },
+                this._positions[frame],
+            ));
         }
 
         return track;
@@ -1056,13 +1107,18 @@ class PolyShapeModel extends ShapeModel {
         this._setupKeyFrames();
     }
 
+    /**
+     * Given the frame number, return the position of the shape in that frame.
+     * Position is interpolated when needed (contain(), distance()), instead of being cached.
+     *
+     * @param {number} frame Frame number.
+     * @returns {Object} Position of the shape in that frame.
+     */
     _interpolatePosition(frame) {
         if (this._type.startsWith('annotation')) {
             return Object.assign({},
                 this._positions[this._frame],
-                {
-                    outside: this._frame != frame,
-                });
+                { outside: this._frame != frame });
         }
 
         let [leftFrame, rightFrame] = this._neighboringFrames(frame);
@@ -1078,19 +1134,17 @@ class PolyShapeModel extends ShapeModel {
 
         if (!leftPos) {
             if (rightPos) {
-                return Object.assign({}, rightPos, {
-                    outside: true,
-                });
+                return Object.assign({},
+                    rightPos,
+                    { outside: true });
             }
 
-            return {
-                outside: true,
-            };
+            return { outside: true };
         }
 
-        return Object.assign({}, leftPos, {
-            outside: leftPos.outside || leftFrame !== frame,
-        });
+        return Object.assign({},
+            leftPos,
+            { outside: leftPos.outside || leftFrame !== frame });
     }
 
     updatePosition(frame, position, silent) {
@@ -1127,16 +1181,21 @@ class PolyShapeModel extends ShapeModel {
             if (!silent) {
                 // Undo/redo code
                 const oldPos = Object.assign({}, this._positions[frame]);
-                window.cvat.addAction('Change Position', () => {
-                    if (!Object.keys(oldPos).length) {
-                        delete this._positions[frame];
-                        this.notify('position');
-                    } else {
-                        this.updatePosition(frame, oldPos, false);
-                    }
-                }, () => {
-                    this.updatePosition(frame, pos, false);
-                }, frame);
+                window.cvat.addAction(
+                    'Change Position',
+                    () => {
+                        if (!Object.keys(oldPos).length) {
+                            delete this._positions[frame];
+                            this.notify('position');
+                        } else {
+                            this.updatePosition(frame, oldPos, false);
+                        }
+                    },
+                    () => {
+                        this.updatePosition(frame, pos, false);
+                    },
+                    frame,
+                );
                 // End of undo/redo code
             }
 
@@ -1146,9 +1205,7 @@ class PolyShapeModel extends ShapeModel {
                 }
                 this._positions[frame] = pos;
             } else {
-                this._positions[frame] = Object.assign(pos, {
-                    outside: position.outside,
-                });
+                this._positions[frame] = Object.assign(pos, { outside: position.outside });
             }
         }
 
@@ -1359,11 +1416,18 @@ class PointsModel extends PolyShapeModel {
         this._minPoints = 1;
     }
 
+    /**
+     * Given the frame number, return the position of the shape in that frame.
+     * Position is interpolated when needed (contain(), distance()), instead of being cached.
+     *
+     * @param {number} frame Frame number.
+     * @returns {Object} Position of the shape in that frame.
+     */
     _interpolatePosition(frame) {
         if (this._type.startsWith('annotation')) {
-            return Object.assign({}, this._positions[this._frame], {
-                outside: this._frame !== frame,
-            });
+            return Object.assign({},
+                this._positions[this._frame],
+                { outside: this._frame !== frame });
         }
 
         let [leftFrame, rightFrame] = this._neighboringFrames(frame);
@@ -1379,14 +1443,12 @@ class PointsModel extends PolyShapeModel {
 
         if (!leftPos) {
             if (rightPos) {
-                return Object.assign({}, rightPos, {
-                    outside: true,
-                });
+                return Object.assign({},
+                    rightPos,
+                    { outside: true });
             }
 
-            return {
-                outside: true,
-            };
+            return { outside: true };
         }
 
         if (frame === leftFrame || leftPos.outside || !rightPos || rightPos.outside) {
@@ -1403,21 +1465,32 @@ class PointsModel extends PolyShapeModel {
                 y: leftPoints[0].y + (rightPoints[0].y - leftPoints[0].y) * moveCoeff,
             }];
 
-            return Object.assign({}, leftPos, {
-                points: PolyShapeModel.convertNumberArrayToString(interpolatedPoints),
-            });
+            return Object.assign({},
+                leftPos,
+                { points: PolyShapeModel.convertNumberArrayToString(interpolatedPoints) });
         }
 
-        return Object.assign({}, leftPos, {
-            outside: true,
-        });
+        return Object.assign({},
+            leftPos,
+            { outside: true });
     }
 
+    /**
+     * The same as BoxModel::distance(), but find distance to point.
+     *
+     * @param {SVGPoint} mousePos Position (of the mouse) in canvas coordinate.
+     * @param {number} frame Frame number.
+     * @returns {number} Minimum distance to a point of the shape.
+     */
     distance(mousePos, frame) {
         const pos = this._interpolatePosition(frame);
-        if (pos.outside) return Number.MAX_SAFE_INTEGER;
+        if (pos.outside) {
+            return Number.MAX_SAFE_INTEGER;
+        }
+
         const points = PolyShapeModel.convertStringToNumberArray(pos.points);
         let minDistance = Number.MAX_SAFE_INTEGER;
+
         for (const point of points) {
             const distance = Math.sqrt(Math.pow(point.x - mousePos.x, 2) + Math.pow(point.y - mousePos.y, 2));
             if (distance < minDistance) {
@@ -1442,6 +1515,13 @@ class PolylineModel extends PolyShapeModel {
         return ((box.xbr - box.xtl) >= AREA_TRESHOLD || (box.ybr - box.ytl) >= AREA_TRESHOLD);
     }
 
+    /**
+     * The same as BoxModel::distance(), but find distance to line of the shape, not the bounding box.
+     *
+     * @param {SVGPoint} mousePos Position (of the mouse) in canvas coordinate.
+     * @param {number} frame Frame number.
+     * @returns {number} Minimum distance to a line of the shape.
+     */
     distance(mousePos, frame) {
         const pos = this._interpolatePosition(frame);
         if (pos.outside) return Number.MAX_SAFE_INTEGER;
@@ -1481,23 +1561,35 @@ class PolygonModel extends PolyShapeModel {
         return ((box.xbr - box.xtl) * (box.ybr - box.ytl) >= AREA_TRESHOLD);
     }
 
+    /**
+     * Given a position in the canvas and frame number, check if it is inside the polygon.
+     * The algorithm used is winding number.
+     *
+     * @param {SVGPoint} mousePos Position (of the mouse) in canvas coordinate.
+     * @param {number} frame Frame number.
+     * @returns {boolean} Whether mousePos is inside the polygon or not.
+     */
     contain(mousePos, frame) {
         const pos = this._interpolatePosition(frame);
-        if (pos.outside) return false;
-        const points = PolyShapeModel.convertStringToNumberArray(pos.points);
-        let wn = 0;
-        for (let i = 0; i < points.length; i++) {
-            const p1 = points[i];
-            const p2 = points[i + 1] || points[0];
+        if (pos.outside) {
+            return false;
+        }
 
-            if (p1.y <= mousePos.y) {
-                if (p2.y > mousePos.y) {
-                    if (isLeft(p1, p2, mousePos) > 0) {
+        const corners = PolyShapeModel.convertStringToNumberArray(pos.points);
+        let wn = 0;
+
+        for (let i = 0; i < corners.length; i++) {
+            const c1 = corners[i];
+            const c2 = corners[i + 1] || corners[0];
+
+            if (c1.y <= mousePos.y) {
+                if (c2.y > mousePos.y) {
+                    if (isLeft(c1, c2, mousePos) > 0) {
                         wn++;
                     }
                 }
-            } else if (p2.y < mousePos.y) {
-                if (isLeft(p1, p2, mousePos) < 0) {
+            } else if (c2.y < mousePos.y) {
+                if (isLeft(c1, c2, mousePos) < 0) {
                     wn--;
                 }
             }
@@ -1505,32 +1597,51 @@ class PolygonModel extends PolyShapeModel {
 
         return wn != 0;
 
+        /**
+         * Check if P2 is on the left, right, or on the line of vector P0P1.
+         * This is basically a cross product of 2 vectors P0P1 and P0P2.
+         *
+         * @returns {number} Positive number if on the left, negative number if on the right, zero if on the line.
+         */
         function isLeft(P0, P1, P2) {
-            return ((P1.x - P0.x) * (P2.y - P0.y) - (P2.x - P0.x) * (P1.y - P0.y));
+            return (P1.x - P0.x) * (P2.y - P0.y) - (P2.x - P0.x) * (P1.y - P0.y);
         }
     }
 
+    /**
+     * The same as BoxModel::distance().
+     *
+     * @param {SVGPoint} mousePos Position (of the mouse) in canvas coordinate.
+     * @param {number} frame Frame number.
+     * @returns {number} Minimum distance to an edge of the shape.
+     */
     distance(mousePos, frame) {
         const pos = this._interpolatePosition(frame);
-        if (pos.outside) return Number.MAX_SAFE_INTEGER;
-        const points = PolyShapeModel.convertStringToNumberArray(pos.points);
+        if (pos.outside) {
+            return Number.MAX_SAFE_INTEGER;
+        }
+
+        const corners = PolyShapeModel.convertStringToNumberArray(pos.points);
+        const { x, y } = mousePos;
         let minDistance = Number.MAX_SAFE_INTEGER;
-        for (let i = 0; i < points.length; i++) {
-            const p1 = points[i];
-            const p2 = points[i + 1] || points[0];
+
+        for (let i = 0; i < corners.length; i++) {
+            const c1 = corners[i];
+            const c2 = corners[i + 1] || corners[0];
 
             // perpendicular from point to straight length
-            const distance = (Math.abs((p2.y - p1.y) * mousePos.x - (p2.x - p1.x) * mousePos.y + p2.x * p1.y - p2.y * p1.x))
-                / Math.sqrt(Math.pow(p2.y - p1.y, 2) + Math.pow(p2.x - p1.x, 2));
+            const distance = Math.abs((c2.y - c1.y) * x - (c2.x - c1.x) * y + c2.x * c1.y - c2.y * c1.x)
+                / Math.sqrt((c2.y - c1.y) ** 2 + (c2.x - c1.x) ** 2);
 
             // check if perpendicular belongs to the straight segment
-            const a = Math.pow(p1.x - mousePos.x, 2) + Math.pow(p1.y - mousePos.y, 2);
-            const b = Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2);
-            const c = Math.pow(p2.x - mousePos.x, 2) + Math.pow(p2.y - mousePos.y, 2);
+            const a = (c1.x - x) ** 2 + (c1.y - y) ** 2;
+            const b = (c2.x - c1.x) ** 2 + (c2.y - c1.y) ** 2;
+            const c = (c2.x - x) ** 2 + (c2.y - y) ** 2;
             if (distance < minDistance && (a + b - c) >= 0 && (c + b - a) >= 0) {
                 minDistance = distance;
             }
         }
+
         return minDistance;
     }
 
@@ -1745,6 +1856,13 @@ class ShapeView extends Listener {
         shapeModel.subscribe(this);
     }
 
+    /**
+     * Make THIS shape (not all shapes) editable (resize, drag,...)
+     * by showing corner points for user to drag.
+     * This function is called whenever the shape is selected,
+     * not a one-time setup, because it actually shows the corners,
+     * instead of just setting callbacks.
+     */
     _makeEditable() {
         if (this._uis.shape && this._uis.shape.node.parentElement && !this._flags.editable) {
             const events = {
@@ -1790,7 +1908,7 @@ class ShapeView extends Listener {
                     .resize({
                         snapToGrid: 0.1,
                     })
-                    .on('resizestart', () => {
+                    .on('resizestart', event => {
                         objWasResized = false;
                         this._flags.resizing = true;
                         events.resize = Logger.addContinuedEvent(Logger.EventType.resizeObject);
@@ -1798,7 +1916,7 @@ class ShapeView extends Listener {
                         this._hideShapeText();
                         this.notify('resize');
                     })
-                    .on('resizing', () => {
+                    .on('resizing', event => {
                         objWasResized = true;
                     })
                     .on('resizedone', () => {
@@ -1816,22 +1934,22 @@ class ShapeView extends Listener {
 
                 const centers = ['t', 'r', 'b', 'l'];
                 const corners = ['lt', 'rt', 'rb', 'lb'];
-                const elements = {};
+                const controlPoints = {};
                 for (let i = 0; i < 4; ++i) {
-                    elements[centers[i]] = $(`.svg_select_points_${centers[i]}`);
-                    elements[corners[i]] = $(`.svg_select_points_${corners[i]}`);
+                    controlPoints[centers[i]] = $(`.svg_select_points_${centers[i]}`);
+                    controlPoints[corners[i]] = $(`.svg_select_points_${corners[i]}`);
                 }
 
                 const angle = window.cvat.player.rotation;
                 const offset = angle / 90 < 0 ? angle / 90 + centers.length : angle / 90;
 
                 for (let i = 0; i < 4; ++i) {
-                    elements[centers[i]]
+                    controlPoints[centers[i]]
                         .removeClass(`svg_select_points_${centers[i]}`)
                         .addClass(`svg_select_points_${centers[(i + offset) % centers.length]}`);
-                    elements[corners[i]]
+                    controlPoints[corners[i]]
                         .removeClass(`svg_select_points_${corners[i]}`)
-                        .addClass(`svg_select_points_${corners[(i + offset) % centers.length]}`);
+                        .addClass(`svg_select_points_${corners[(i + offset) % corners.length]}`);
                 }
 
                 this._updateColorForDots();
@@ -1916,11 +2034,18 @@ class ShapeView extends Listener {
         }
     }
 
+    /**
+     * The reverse of _makeEditable().
+     * This function is called whenever the shape is deselected.
+     */
     _makeNotEditable() {
         if (this._uis.shape && this._flags.editable) {
-            this._uis.shape.draggable(false).selectize(false, {
-                deepSelect: true,
-            }).resize(false);
+            this._uis.shape
+                .draggable(false)
+                .selectize(false, {
+                    deepSelect: true,
+                })
+                .resize(false);
 
             if (this._flags.resizing) {
                 this._flags.resizing = false;
@@ -1932,7 +2057,8 @@ class ShapeView extends Listener {
                 this.notify('drag');
             }
 
-            this._uis.shape.off('dragstart')
+            this._uis.shape
+                .off('dragstart')
                 .off('dragend')
                 .off('resizestart')
                 .off('resizing')
@@ -1946,6 +2072,10 @@ class ShapeView extends Listener {
         $('.custom-menu').hide(100);
     }
 
+    /**
+     * Add shape highlighting when select.
+     * In fact, most of the highlighting code is inside _makeEditable().
+     */
     _select() {
         if (this._uis.shape && this._uis.shape.node.parentElement) {
             this._uis.shape.addClass('selectedShape');
@@ -1959,6 +2089,9 @@ class ShapeView extends Listener {
         }
     }
 
+    /**
+     * The reverse of _select().
+     */
     _deselect() {
         if (this._uis.shape) {
             this._uis.shape.removeClass('selectedShape');
@@ -2780,6 +2913,11 @@ class ShapeView extends Listener {
         }
     }
 
+    /**
+     * Callback to receive update from ShapeModel.
+     *
+     * @param {ShapeModel} model ShapeModel of this ShapeView.
+     */
     onShapeUpdate(model) {
         const interpolation = model.interpolate(window.cvat.player.frames.current);
         const { activeAttribute } = model;
@@ -2799,6 +2937,8 @@ class ShapeView extends Listener {
             this._hideShapeText();
         }
 
+        // Case with curly braces creates block scope, so multiple let/const of
+        // the same variable is possible.
         switch (model.updateReason) {
         case 'activation':
             if (!model.active) {
@@ -3060,18 +3200,21 @@ class BoxView extends ShapeView {
     _makeEditable() {
         if (this._uis.shape && this._uis.shape.node.parentElement && !this._flags.editable) {
             if (!this._controller.lock) {
-                this._uis.shape.on('resizestart', (e) => {
-                    if (this._uis.boxSize) {
-                        this._uis.boxSize.rm();
-                        this._uis.boxSize = null;
-                    }
+                this._uis.shape
+                    .on('resizestart', (e) => {
+                        if (this._uis.boxSize) {
+                            this._uis.boxSize.rm();
+                            this._uis.boxSize = null;
+                        }
 
-                    this._uis.boxSize = drawBoxSize(this._scenes.svg, this._scenes.texts, e.target.getBBox());
-                }).on('resizing', (e) => {
-                    this._uis.boxSize = drawBoxSize.call(this._uis.boxSize, this._scenes.svg, this._scenes.texts, e.target.getBBox());
-                }).on('resizedone', () => {
-                    this._uis.boxSize.rm();
-                });
+                        this._uis.boxSize = drawBoxSize(this._scenes.svg, this._scenes.texts, e.target.getBBox());
+                    })
+                    .on('resizing', (e) => {
+                        this._uis.boxSize = drawBoxSize.call(this._uis.boxSize, this._scenes.svg, this._scenes.texts, e.target.getBBox());
+                    })
+                    .on('resizedone', () => {
+                        this._uis.boxSize.rm();
+                    });
             }
             ShapeView.prototype._makeEditable.call(this);
         }
@@ -3140,6 +3283,9 @@ class PolyShapeView extends ShapeView {
         };
     }
 
+    /**
+     * See parent implementation comment.
+     */
     _makeEditable() {
         ShapeView.prototype._makeEditable.call(this);
         if (this._flags.editable) {
@@ -3237,6 +3383,9 @@ class PolygonView extends PolyShapeView {
         ShapeView.prototype._drawShapeUI.call(this);
     }
 
+    /**
+     * See parent implementation comment.
+     */
     _makeEditable() {
         PolyShapeView.prototype._makeEditable.call(this);
         if (this._flags.editable && !this._controller.draggable) {
@@ -3245,6 +3394,11 @@ class PolygonView extends PolyShapeView {
         }
     }
 
+    /**
+     * Callback to receive update from PolygonModel.
+     *
+     * @param {PolygonModel} model Polygon model of this PolygonView.
+     */
     onShapeUpdate(model) {
         ShapeView.prototype.onShapeUpdate.call(this, model);
         if (model.updateReason === 'draggable' && this._flags.editable) {
