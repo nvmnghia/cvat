@@ -1,3 +1,5 @@
+/* eslint-disable array-bracket-spacing */
+/* eslint-disable comma-spacing */
 /* eslint-disable no-multi-spaces */
 /*
  * Copyright (C) 2018 Intel Corporation
@@ -9,42 +11,82 @@
 
 'use strict';
 
+/**
+ * No function modifies the input object in place, except the dash (for internal use).
+ * There're 2 types of shape data, and only differ in how the coordinate is stored:
+ *   - Server type
+ *   - Client type
+ * Each has slightly different structure.
+ * There're 3 types of coordinate:
+ *   - Image coordinate ("actual" in the code): for storing shape data.
+ *   - Canvas coordinate: for drawing data.
+ *   - Viewport coordinate (also refer to as "client"): for processing mouse event.
+ * Somehow, converting between image and canvas coordinate systems is as simple as
+ * adding or subtracting the _playerOffset value.
+ */
 class CoordinateTranslator {
     constructor() {
         this._boxTranslator = {
             _playerOffset: 0,
+
+            /**
+             * Convert between canvas and image coordinate.
+             *
+             * @param {BoxPosition} box Box data.
+             * @param {number} sign 1 for image to canvas, -1 the other way.
+             * @returns {BoxPosition} Converted box data.
+             */
             _convert(box, sign) {
+                const offset = this._playerOffset * sign;
                 for (const prop of ['xtl', 'ytl', 'xbr', 'ybr', 'x', 'y']) {
                     if (prop in box) {
-                        box[prop] += this._playerOffset * sign;
+                        box[prop] += offset;
                     }
                 }
-
                 return box;
             },
+
+            /**
+             * Convert client box data, in image coordinate, to canvas coordinate.
+             *
+             * @param {BoxPosition} actualBox Client box data in image coordinate.
+             * @returns {BoxPosition} Client box data, converted to canvas coordinate.
+             */
             actualToCanvas(actualBox) {
                 const canvasBox = {};
                 for (const key in actualBox) {
                     canvasBox[key] = actualBox[key];
                 }
-
                 return this._convert(canvasBox, 1);
             },
 
+            /**
+             * The reverse of actualToCanvas().
+             *
+             * @param {BoxPosition} canvasBox Client box data in canvas coordinate.
+             * @returns {BoxPosition} Client box data, converted to image coordinate.
+             */
             canvasToActual(canvasBox) {
                 const actualBox = {};
                 for (const key in canvasBox) {
                     actualBox[key] = canvasBox[key];
                 }
-
                 return this._convert(actualBox, -1);
             },
 
+            /**
+             * Convert canvas box to viewport box.
+             *
+             * @param {SVGElement} sourceCanvas Source canvas.
+             * @param {SVGRect} canvasBox Canvas box data.
+             * @returns {{x: number, y: number, width: number, height: number}} Box position in viewport coordinate,
+             *                                                                  same structure as SVGRect.
+             */
             canvasToClient(sourceCanvas, canvasBox) {
                 const points = [
-                    [canvasBox.x, canvasBox.y],
-                    [canvasBox.x + canvasBox.width, canvasBox.y],
-                    [canvasBox.x, canvasBox.y + canvasBox.height],
+                    [canvasBox.x                  , canvasBox.y                   ],
+                    [canvasBox.x + canvasBox.width, canvasBox.y                   ],
+                    [canvasBox.x                  , canvasBox.y + canvasBox.height],
                     [canvasBox.x + canvasBox.width, canvasBox.y + canvasBox.height],
                 ].map(el => window.cvat.translate.point.canvasToClient(sourceCanvas, ...el));
 
@@ -64,6 +106,12 @@ class CoordinateTranslator {
                 };
             },
 
+            /**
+             * Convert server point format to client point format.
+             *
+             * @param {Object} shape Server raw data.
+             * @returns {{xtl: number, ytl: number, xbr: number, ybr: number}} Client box position.
+             */
             serverToClient(shape) {
                 return {
                     xtl: shape.points[0],
@@ -73,6 +121,12 @@ class CoordinateTranslator {
                 };
             },
 
+            /**
+             * The reverse of serverToClient().
+             *
+             * @param {Object} clientObject Client box data.
+             * @returns {{points: number[]}} Server box position.
+             */
             clientToServer(clientObject) {
                 return {
                     points: [clientObject.xtl, clientObject.ytl,
@@ -83,32 +137,60 @@ class CoordinateTranslator {
 
         this._pointsTranslator = {
             _playerOffset: 0,
+
+            /**
+             * Convert between canvas and image coordinate.
+             *
+             * @param {string|Object} points Points data.
+             * @param {number} sign 1 for image to canvas, -1 the other way.
+             * @returns {string|Object} Converted points data.
+             */
             _convert(points, sign) {
+                const offset = this._playerOffset * sign;
                 if (typeof (points) === 'string') {
-                    return points.split(' ').map(coord => coord.split(',')
-                        .map(x => +x + this._playerOffset * sign).join(',')).join(' ');
+                    return points
+                        .split(' ')
+                        .map(coord => coord
+                            .split(',')
+                            .map(x => +x + offset)
+                            .join(','))
+                        .join(' ');
                 }
                 if (typeof (points) === 'object') {
                     return points.map(point => ({
-                        x: point.x + this._playerOffset * sign,
-                        y: point.y + this._playerOffset * sign,
+                        x: point.x + offset,
+                        y: point.y + offset,
                     }));
                 }
                 throw Error('Unknown points type was found');
             },
+
+            /**
+             * Convert client points data, in image coordinate, to canvas coordinate.
+             *
+             * @param {string|Object} actualPoints Client points data in image coordinate.
+             * @returns {string|Object} Client points data, converted to canvas coordinate.
+             */
             actualToCanvas(actualPoints) {
                 return this._convert(actualPoints, 1);
             },
 
+            /**
+             * The reverse of actualToCanvas().
+             *
+             * @param {Object} actualPoints Client points data in canvas coordinate.
+             * @returns {Object} Client points data, converted to image coordinate.
+             */
             canvasToActual(canvasPoints) {
                 return this._convert(canvasPoints, -1);
             },
+
             /**
-             * Convert server point format to client point format.
+             * Convert server points format to client points format.
              *
              * @param {Object} shape Server raw data.
-             * @returns {{points: string}} Point data of shape, serialized in the following format:
-             *                             "x0,y0 x1,y1..."
+             * @returns {{points: string}} Points data of the shape, serialized in this format:
+             *                             'x0,y0 x1,y1...'
              */
             serverToClient(shape) {
                 return {
@@ -127,15 +209,38 @@ class CoordinateTranslator {
                 };
             },
 
+            /**
+             * The reverse of serverToClient().
+             *
+             * @param {Object} clientPoints Client points data.
+             * @returns {{points: number[]}} Server points data, deserialized into an array in this format:
+             *                                 [x0, y0, x1, y1,...]
+             */
             clientToServer(clientPoints) {
                 return {
-                    points: clientPoints.points.split(' ').join(',').split(',').map(x => +x),
+                    points: clientPoints.points
+                        .split(' ')
+                        .join(',')
+                        .split(',')
+                        .map(x => +x),
                 };
             },
         };
 
         this._pointTranslator = {
             _rotation: 0,
+
+            /**
+             * Convert viewport coordinate to canvas coordinate.
+             * https://www.w3.org/TR/css-transforms-1/#current-transformation-matrix
+             * CTM maps a "local" coordinate system to viewport coordinate system.
+             * This functions attempts to do the reverse, so inverse() of CTM is used.
+             *
+             * @param {SVGElement} targetCanvas Target canvas.
+             * @param {number} clientX x-coordinate of a point in viewport.
+             * @param {number} clientY y-coordinate of a point in viewport.
+             * @returns {SVGPoint} Point in canvas coordinate.
+             */
             clientToCanvas(targetCanvas, clientX, clientY) {
                 let pt = targetCanvas.createSVGPoint();
                 pt.x = clientX;
@@ -143,6 +248,15 @@ class CoordinateTranslator {
                 pt = pt.matrixTransform(targetCanvas.getScreenCTM().inverse());
                 return pt;
             },
+
+            /**
+             * The reverse of clientToCanvas().
+             *
+             * @param {SVGElement} sourceCanvas Source canvas.
+             * @param {number} canvasX x-coordinate of a point in canvas.
+             * @param {number} canvasY y-coordinate of a point in canvas.
+             * @returns {SVGPoint} Point in viewport coordinate.
+             */
             canvasToClient(sourceCanvas, canvasX, canvasY) {
                 let pt = sourceCanvas.createSVGPoint();
                 pt.x = canvasX;
@@ -150,6 +264,7 @@ class CoordinateTranslator {
                 pt = pt.matrixTransform(sourceCanvas.getScreenCTM());
                 return pt;
             },
+
             rotate(x, y, cx, cy) {
                 cx = (typeof cx === 'undefined' ? 0 : cx);
                 cy = (typeof cy === 'undefined' ? 0 : cy);
@@ -159,8 +274,8 @@ class CoordinateTranslator {
                 const sin = Math.sin(radians);
 
                 return {
-                    x: (cos * (x - cx)) + (sin * (y - cy)) + cx,
-                    y: (cos * (y - cy)) - (sin * (x - cx)) + cy,
+                    x: cos * (x - cx) + sin * (y - cy) + cx,
+                    y: cos * (y - cy) - sin * (x - cx) + cy,
                 };
             },
         };

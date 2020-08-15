@@ -206,6 +206,9 @@ class AnnotationSaverModel extends Listener {
         return [created, updated, deleted];
     }
 
+    /**
+     * @returns {string} Stringified export data.
+     */
     _getHash() {
         const exported = this._shapeCollection.export()[0];
         return JSON.stringify(exported);

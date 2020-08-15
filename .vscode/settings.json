@@ -64,6 +64,11 @@
         "segm",
         "selectize",
         "shortkeys",
-        "undopoint"
+        "splittable",
+        "undopoint",
+        "xmax",
+        "xmin",
+        "ymax",
+        "ymin"
     ]
 }
