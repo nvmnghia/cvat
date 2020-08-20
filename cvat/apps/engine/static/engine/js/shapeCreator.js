@@ -610,7 +610,7 @@ class ShapeCreatorView {
      * Sort points clockwise.
      * There's no guarantee about the first point.
      *
-     * @param {Array.<{x: number, y: number}>} points The points to be sorted.
+     * @param {Point[]} points The points to be sorted.
      * @returns {Array.<{x: number, y: number, ang: number}>} The sorted points.
      */
     _sortClockwise(points) {

@@ -23,6 +23,9 @@
  *   - Viewport coordinate (also refer to as "client"): for processing mouse event.
  * Somehow, converting between image and canvas coordinate systems is as simple as
  * adding or subtracting the _playerOffset value.
+ *
+ * TODO: recheck the 3 types of coordinate!
+ * In the callback for mousemove of _frameContent, clientToCanvas return a image coordinate.
  */
 class CoordinateTranslator {
     constructor() {

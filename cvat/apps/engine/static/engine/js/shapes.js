@@ -68,13 +68,13 @@ const TEXT_MARGIN = 10;
  * @typedef {Object} ShapeInFrame
  * @property {AttrNameVal} attributes Attributes of the shape.
  * @property {Object} position Position of the shape. More precisely,
- *                             it is a ShapePosition if the shape is a box.
+ *                             it is a BoxPosition if the shape is a box.
  */
 
 /**
  * Position of the box, along with some metadata for rendering.
  *
- * @typedef ShapePosition
+ * @typedef BoxPosition
  * @type {object}
  * @property {number} xtl
  * @property {number} ytl
@@ -83,6 +83,15 @@ const TEXT_MARGIN = 10;
  * @property {boolean} occluded
  * @property {boolean} outside Is the shape outside of the view?
  * @property {number} z_order
+ */
+
+/**
+ * A simple 2D point.
+ *
+ * @typedef Point
+ * @type {Object}
+ * @property {number} x
+ * @property {number} y
  */
 
 /** ****************************** SHAPE MODELS  ******************************* */
@@ -781,6 +790,17 @@ class ShapeModel extends Listener {
     get clipToFrame() {
         return this._clipToFrame;
     }
+
+    /**
+     * Check if the shape can be split geometrically (not to be confused with split interpolation feature).
+     * The shape is splittable only if it is an annotated shape, and must be either a BoxModel or PolygonModel.
+     */
+    get splittable() {
+        return this.type.split('_')[0] === 'annotation' && (
+            this instanceof BoxModel
+            || this instanceof PolygonModel
+        );
+    }
 }
 
 class BoxModel extends ShapeModel {
@@ -807,7 +827,7 @@ class BoxModel extends ShapeModel {
      * Position is interpolated when needed (contain(), distance()), instead of being cached.
      *
      * @param {number} frame Frame number.
-     * @returns {ShapePosition} Position of the box in that frame.
+     * @returns {BoxPosition} Position of the box in that frame.
      */
     _interpolatePosition(frame) {
         if (this._type.startsWith('annotation')) {
@@ -1098,6 +1118,61 @@ class BoxModel extends ShapeModel {
 
         return imported;
     }
+
+    /**
+     * Given a shape, check if it is adjacent to this one.
+     * Adjacent means the 2 shapes must touch in at least one corner,
+     * and they must be of the same type. Some minor spacing (2% of
+     * canvas's larger side) between them is allowed.
+     *
+     * @param {ShapeModel} shape Model of the shape to be checked.
+     * @returns {boolean} Whether shape is adjacent to this or not.
+     */
+    isAdjacentTo(shape) {
+        if (!(shape instanceof BoxModel) || this.frame !== shape.frame) {
+            return false;
+        }
+
+        const thisCorners = getCorners(this);
+        const shapeCorners = getCorners(shape);
+
+        for (const thisCorner of thisCorners) {
+            for (const shapeCorner of shapeCorners) {
+                if (isAdjacent(thisCorner, shapeCorner)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+
+        /**
+         * Get box's corners.
+         *
+         * @param {BoxModel} box
+         * @returns {Point[]} List of corners, sorted clockwise, from the top left one.
+         */
+        function getCorners(box) {
+            const { xtl, ytl, xbr, ybr } = box._positions[box.frame];
+            return [
+                { x: xtl, y: ytl },
+                { x: xbr, y: ytl },
+                { x: xbr, y: ybr },
+                { x: xtl, y: ybr },
+            ];
+        }
+    }
+
+    /**
+     * Given a point, check if it is adjacent to this shape.
+     * See isAdjacentToShape() for adjacent criteria.
+     *
+     * @param {Point} point The point to be checked.
+     * @returns {number} Index of corner adjacent to point, -1 if none is.
+     */
+    indexOfCornerAdjacentTo(point) {
+
+    }
 }
 
 class PolyShapeModel extends ShapeModel {
@@ -1307,17 +1382,27 @@ class PolyShapeModel extends ShapeModel {
      * Deserialize points (serialized in window.cvat.translate.points.serverToClient).
      *
      * @param {string} serializedPoints Serialized points.
-     * @returns {{x: number, y: number}[]} Deserialized point coordinates.
+     * @returns {Point[]} Deserialized point coordinates.
      */
     static convertStringToNumberArray(serializedPoints) {
-        const pointArray = [];
-        for (const pair of serializedPoints.split(' ')) {
-            pointArray.push({
-                x: +pair.split(',')[0],
-                y: +pair.split(',')[1],
+        // const pointArray = [];
+        // for (const pair of serializedPoints.split(' ')) {
+        //     pointArray.push({
+        //         x: +pair.split(',')[0],
+        //         y: +pair.split(',')[1],
+        //     });
+        // }
+        // return pointArray;
+
+        return serializedPoints
+            .split(' ')
+            .map(pair => {
+                pair = pair.split(',');
+                return {
+                    x: +pair[0],
+                    y: +pair[1],
+                };
             });
-        }
-        return pointArray;
     }
 
     static convertNumberArrayToString(arrayPoints) {
@@ -1653,6 +1738,47 @@ class PolygonModel extends PolyShapeModel {
     get draggable() {
         return this._draggable;
     }
+
+    /**
+     * See BoxModel's implementation comment.
+     *
+     * @param {ShapeModel} shape Model of the shape to be checked.
+     * @returns {boolean} Whether shape is adjacent to this or not.
+     */
+    isAdjacentTo(shape) {
+        if (!(shape instanceof PolygonModel) || this.frame !== shape.frame) {
+            return false;
+        }
+
+        const thisCorners = PolyShapeModel.convertStringToNumberArray(this._positions[this.frame].points);
+        const shapeCorners = PolyShapeModel.convertStringToNumberArray(shape._positions[shape.frame].points);
+
+        for (const thisCorner of thisCorners) {
+            for (const shapeCorner of shapeCorners) {
+                if (isAdjacent(thisCorner, shapeCorner)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * See BoxModel's implementation comment.
+     *
+     * @param {Point} point Point to be checked.
+     * @returns {number} Index of corner adjacent to point, -1 if none is.
+     */
+    indexOfCornerAdjacentTo(point) {
+        const corners = PolyShapeModel.convertStringToNumberArray(this._positions[this.frame].points);
+        for (let i = 0; i < corners.length; ++i) {
+            if (isAdjacent(corners[i], point)) {
+                return i;
+            }
+        }
+        return -1;
+    }
 }
 
 /** ****************************** SHAPE CONTROLLERS  ******************************* */
@@ -1733,6 +1859,9 @@ class ShapeController {
         this._model.click();
     }
 
+    /**
+     * @returns {ShapeModel}
+     */
     model() {
         return this._model;
     }
@@ -1814,6 +1943,13 @@ class PolygonController extends PolyShapeController {
 
 /** ****************************** SHAPE VIEWS  ******************************* */
 class ShapeView extends Listener {
+    /**
+     * @param {ShapeModel} shapeModel
+     * @param {ShapeController} shapeController
+     * @param {SVG.Element} svgScene
+     * @param {jQuery} menusScene
+     * @param {SVG.Element} textsScene
+     */
     constructor(shapeModel, shapeController, svgScene, menusScene, textsScene) {
         super('onShapeViewUpdate', () => this);
         this._uis = {
@@ -1896,8 +2032,10 @@ class ShapeView extends Listener {
                         this.notify('drag');
                     });
 
-                // Setup resize events
+                // Check if resize actually happens or not to avoid redundant data updates.
                 let objWasResized = false;
+
+                // Setup resize events
                 this._uis.shape
                     .selectize({
                         classRect: 'shapeSelect',
@@ -1909,27 +2047,36 @@ class ShapeView extends Listener {
                         snapToGrid: 0.1,
                     })
                     .on('resizestart', event => {
+                        // Corner's mousedown callback.
                         objWasResized = false;
                         this._flags.resizing = true;
+                        this.resizeDetail = event.detail;    // Other ugly options: 1. Get ShapeCollectionView from listeners. 2. Add another on('...') in ShapeCollectionView.
                         events.resize = Logger.addContinuedEvent(Logger.EventType.resizeObject);
+
                         blurAllElements();
                         this._hideShapeText();
-                        this.notify('resize');
+                        this.notify('resizestart');
                     })
                     .on('resizing', event => {
+                        // Corner's mousemove callback
                         objWasResized = true;
+                        this.resizeDetail = event.detail;
+                        this.notify('resizing');
                     })
                     .on('resizedone', () => {
+                        // Corner's mouseup callback.
                         events.resize.close();
                         events.resize = null;
+                        this.resizeDetail = null;
                         this._flags.resizing = false;
                         if (objWasResized) {
                             const frame = window.cvat.player.frames.current;
                             this._controller.updatePosition(frame, this._buildPosition());
                             objWasResized = false;
                         }
+
                         this._showShapeText();
-                        this.notify('resize');
+                        this.notify('resizedone');
                     });
 
                 const centers = ['t', 'r', 'b', 'l'];
@@ -2828,6 +2975,13 @@ class ShapeView extends Listener {
         });
     }
 
+    /**
+     * Notify listeners with reason.
+     * The reason is temporary, as this_updateReason will be revert
+     * back to the current one after notifying all the listeners.
+     *
+     * @param {string} newReason Reason to update.
+     */
     notify(newReason) {
         const oldReason = this._updateReason;
         this._updateReason = newReason;
@@ -3170,7 +3324,11 @@ class ShapeView extends Listener {
         return this._updateReason;
     }
 
-    // Used in shapeGrouper in order to get model via controller and set group id
+    /**
+     * Used in shapeGrouper in order to get model via controller and set group id.
+     *
+     * @returns {ShapeController}
+     */
     controller() {
         return this._controller;
     }
@@ -3191,12 +3349,22 @@ ShapeView.labels = function () {
 };
 
 class BoxView extends ShapeView {
+    /**
+     * @param {BoxModel} boxModel
+     * @param {BoxController} boxController
+     * @param {SVG.Element} svgScene
+     * @param {jQuery} menusScene
+     * @param {SVG.Element} textsScene
+     */
     constructor(boxModel, boxController, svgScene, menusScene, textsScene) {
         super(boxModel, boxController, svgScene, menusScene, textsScene);
 
         this._uis.boxSize = null;
     }
 
+    /**
+     * See parent implementation comment.
+     */
     _makeEditable() {
         if (this._uis.shape && this._uis.shape.node.parentElement && !this._flags.editable) {
             if (!this._controller.lock) {
@@ -3244,7 +3412,7 @@ class BoxView extends ShapeView {
     /**
      * Draw the box, actually.
      *
-     * @param {ShapePosition} position Position of the shape.
+     * @param {BoxPosition} position Position of the shape.
      */
     _drawShapeUI(position) {
         position = window.cvat.translate.box.actualToCanvas(position);
@@ -3267,9 +3435,25 @@ class BoxView extends ShapeView {
         // Call parent implementation.
         ShapeView.prototype._drawShapeUI.call(this);
     }
+
+    /**
+     * Resize this shape according to a shape that is being resized manually.
+     *
+     * @param {{x: number, y: number, event: Object}} resizeDetail Detail of the resize operation.
+     */
+    resizeByMouseEvent(resizeDetail) {
+
+    }
 }
 
 class PolyShapeView extends ShapeView {
+    /**
+     * @param {PolyShapeModel} polyShapeModel
+     * @param {PolyShapeController} polyShapeController
+     * @param {SVG.Element} svgScene
+     * @param {jQuery} menusScene
+     * @param {SVG.Element} textsScene
+     */
     constructor(polyShapeModel, polyShapeController, svgScene, menusScene, textsScene) {
         super(polyShapeModel, polyShapeController, svgScene, menusScene, textsScene);
     }
@@ -3366,19 +3550,30 @@ class PolyShapeView extends ShapeView {
 }
 
 class PolygonView extends PolyShapeView {
+    /**
+     * @param {PolygonModel} polygonModel
+     * @param {PolygonController} polygonController
+     * @param {SVG.Element} svgContent
+     * @param {jQuery} UIContent
+     * @param {SVG.Element} textsScene
+     */
     constructor(polygonModel, polygonController, svgContent, UIContent, textsScene) {
         super(polygonModel, polygonController, svgContent, UIContent, textsScene);
     }
 
     _drawShapeUI(position) {
         const points = window.cvat.translate.points.actualToCanvas(position.points);
-        this._uis.shape = this._scenes.svg.polygon(points).fill(this._appearance.colors.shape).attr({
-            fill: this._appearance.fill || this._appearance.colors.shape,
-            stroke: this._appearance.stroke || this._appearance.colors.shape,
-            'stroke-width': STROKE_WIDTH / window.cvat.player.geometry.scale,
-            z_order: position.z_order,
-            'fill-opacity': this._appearance.fillOpacity,
-        }).addClass('shape');
+        this._uis.shape = this._scenes.svg
+            .polygon(points)
+            .fill(this._appearance.colors.shape)
+            .attr({
+                fill: this._appearance.fill || this._appearance.colors.shape,
+                stroke: this._appearance.stroke || this._appearance.colors.shape,
+                'stroke-width': STROKE_WIDTH / window.cvat.player.geometry.scale,
+                z_order: position.z_order,
+                'fill-opacity': this._appearance.fillOpacity,
+            })
+            .addClass('shape');
 
         ShapeView.prototype._drawShapeUI.call(this);
     }
@@ -3409,9 +3604,50 @@ class PolygonView extends PolyShapeView {
             }
         }
     }
+
+    /**
+     * See BoxView's implementation comment.
+     *
+     * @param {{x: number, y: number, event: Object}} resizeDetail Detail of the resize operation.
+     */
+    resizeByMouseEvent(resizeDetail) {
+        const mousePos = { x: resizeDetail.dx, y: resizeDetail.dy };
+        const model = this.controller().model();
+        const thisCorners = PolyShapeModel.convertStringToNumberArray(model._positions[model.frame].points);
+
+        // for (const corner of thisCorners) {
+        //     if (isAdjacent(corner, mousePos)) {
+        //         let resizeHandler = this._uis.shape.remember('_resizeHandler');
+        //         if (!resizeHandler) {
+        //             resizeHandler = this._uis.shape
+        //                 .selectize({
+        //                     points: [],    // Don't draw points
+        //                     classRect: 'shapeSelect',
+        //                     rotationPoint: false,
+        //                     // pointSize: POINT_RADIUS * 2 / window.cvat.player.geometry.scale,
+        //                     deepSelect: true,
+        //                 })
+        //                 .resize({
+        //                     snapToGrid: 0.1,
+        //                 })
+        //                 .remember('_resizeHandler');
+        //         }
+        //         resizeHandler.resize(resizeDetail.event);
+
+        //         break;
+        //     }
+        // }
+    }
 }
 
 class PolylineView extends PolyShapeView {
+    /**
+     * @param {PolylineModel} polylineModel
+     * @param {PolylineController} polylineController
+     * @param {SVG.Element} svgScene
+     * @param {jQuery} menusScene
+     * @param {SVG.Element} textsScene
+     */
     constructor(polylineModel, polylineController, svgScene, menusScene, textsScene) {
         super(polylineModel, polylineController, svgScene, menusScene, textsScene);
     }
@@ -3476,6 +3712,13 @@ class PolylineView extends PolyShapeView {
 }
 
 class PointsView extends PolyShapeView {
+    /**
+     * @param {PointsModel} pointsModel
+     * @param {PointsController} pointsController
+     * @param {SVG.Element} svgScene
+     * @param {jQuery} menusScene
+     * @param {SVG.Element} textsScene
+     */
     constructor(pointsModel, pointsController, svgScene, menusScene, textsScene) {
         super(pointsModel, pointsController, svgScene, menusScene, textsScene);
         this._uis.points = null;
@@ -3506,12 +3749,14 @@ class PointsView extends PolyShapeView {
             return;
         }
 
-        this._uis.points = this._scenes.svg.group()
+        this._uis.points = this._scenes.svg
+            .group()
             .fill(this._appearance.fill || this._appearance.colors.shape)
             .on('click', () => {
                 this._positionateMenus();
                 this._controller.click();
-            }).addClass('pointTempGroup');
+            })
+            .addClass('pointTempGroup');
 
         this._uis.points.node.setAttribute('z_order', position.z_order);
 
@@ -3519,7 +3764,9 @@ class PointsView extends PolyShapeView {
         for (const point of points) {
             const radius = POINT_RADIUS * 2 / window.cvat.player.geometry.scale;
             const scaledStroke = STROKE_WIDTH / window.cvat.player.geometry.scale;
-            this._uis.points.circle(radius).move(point.x - radius / 2, point.y - radius / 2)
+            this._uis.points
+                .circle(radius)
+                .move(point.x - radius / 2, point.y - radius / 2)
                 .fill('inherit').stroke('black')
                 .attr('stroke-width', scaledStroke)
                 .addClass('tempMarker');
@@ -3534,6 +3781,9 @@ class PointsView extends PolyShapeView {
         }
     }
 
+    /**
+     * See parent implementation comment.
+     */
     _makeEditable() {
         PolyShapeView.prototype._makeEditable.call(this);
         if (!this._controller.lock) {
@@ -3542,6 +3792,9 @@ class PointsView extends PolyShapeView {
         }
     }
 
+    /**
+     * See parent implementation comment.
+     */
     _makeNotEditable() {
         PolyShapeView.prototype._makeNotEditable.call(this);
         if (!this._controller.hiddenShape) {
@@ -3555,9 +3808,12 @@ class PointsView extends PolyShapeView {
 
     _drawShapeUI(position) {
         const points = window.cvat.translate.points.actualToCanvas(position.points);
-        this._uis.shape = this._scenes.svg.polyline(points).addClass('shape points').attr({
-            z_order: position.z_order,
-        });
+        this._uis.shape = this._scenes.svg
+            .polyline(points)
+            .addClass('shape points')
+            .attr({
+                z_order: position.z_order,
+            });
         this._drawPointMarkers(Object.assign(position, { points }));
         ShapeView.prototype._drawShapeUI.call(this);
     }
@@ -3617,6 +3873,20 @@ class PointsView extends PolyShapeView {
     }
 }
 
+/**
+ * Given 2 points, check if they are adjacent (distance less than 2% of canvas's larger side).
+ *
+ * @returns {boolean} Whether they are adjacent or not.
+ */
+function isAdjacent(p1, p2) {
+    if (p1.x === p2.x && p1.y === p2.y) {
+        return true;
+    }
+    const { frameWidth, frameHeight } = window.cvat.player.geometry;
+    const THRESHOLD = 0.02 * Math.min(frameWidth, frameHeight);
+    return Math.abs(p1.x - p2.x) <= THRESHOLD && Math.abs(p1.y - p2.y) <= THRESHOLD;    // Acceptable, faster == better.
+}
+
 function buildShapeModel(data, type, clientID, color) {
     // Note switch fall through.
     switch (type) {
@@ -3643,6 +3913,9 @@ function buildShapeModel(data, type, clientID, color) {
     throw Error('Unreacheable code was reached.');
 }
 
+/**
+ * @param {ShapeModel} shapeModel
+ */
 function buildShapeController(shapeModel) {
     switch (shapeModel.type) {
     case 'interpolation_box':
@@ -3664,6 +3937,13 @@ function buildShapeController(shapeModel) {
     throw Error('Unreacheable code was reached.');
 }
 
+/**
+ * @param {ShapeModel} shapeModel
+ * @param {ShapeController} shapeController
+ * @param {SVG.Element} svgContent
+ * @param {jQuery} UIContent
+ * @param {SVG.Element} textsContent
+ */
 function buildShapeView(shapeModel, shapeController, svgContent, UIContent, textsContent) {
     switch (shapeModel.type) {
     case 'interpolation_box':

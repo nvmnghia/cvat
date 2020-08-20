@@ -42,16 +42,22 @@ class ShapeCollectionModel extends Listener {
     constructor() {
         super('onCollectionUpdate', () => this);
 
-        // Dict of frame's shapes, keyed with frame number.
-        // It can't be an array, as array has to be continuous.
-        /** @type {Object.<number, ShapeModel>} */
+        /**
+         * Dict of frame's shapes, keyed with frame number.
+         * It can't be an array, as array has to be continuous.
+         *
+         * @type {Object.<number, ShapeModel>}
+         */
         this._annotationShapes = {};
 
         this._groups = {};
         this._interpolationShapes = [];
 
-        // List of all shapes.
-        /** @type {ShapeModel[]} */
+        /**
+         * List of all shapes.
+         *
+         * @type {ShapeModel[]}
+         */
         this._shapes = [];
 
         this._showAllInterpolation = false;
@@ -956,6 +962,9 @@ class ShapeCollectionModel extends Listener {
 }
 
 class ShapeCollectionController {
+    /**
+     * @param {ShapeCollectionModel} collectionModel
+     */
     constructor(collectionModel) {
         this._model = collectionModel;
         this._filterController = new FilterController(collectionModel.filter);
@@ -1191,6 +1200,7 @@ class ShapeCollectionController {
         let typeOfShape;
 
         // TODO: Move this whole if-else block to individual ShapeModel.
+        // TODO: Fix _positions[0] to _position[activeShape.frame] and use convertStringToNumberArray.
         if (activeShape instanceof BoxModel) {
             const {
                 xtl, ytl, xbr, ybr,
@@ -1231,15 +1241,7 @@ class ShapeCollectionController {
         } else if (activeShape instanceof PolygonModel) {
             // points are serialized in the following format:
             //   x0,y0 x1,y1...
-            const corners = activeShape._positions[0].points
-                .split(' ')
-                .map(pair => {
-                    pair = pair.split(',');
-                    return {
-                        x: +pair[0],
-                        y: +pair[1],
-                    };
-                });
+            const corners = PolyShapeModel.convertStringToNumberArray(activeShape._positions[0].points);
 
             // Check if the split is feasible
             if (corners.length !== 4) {
@@ -1358,8 +1360,8 @@ class ShapeCollectionController {
          * Sort 4 corners of a convex quadrilateral clockwise.
          * The first corner is the top left.
          *
-         * @param {Array.<{x: number, y: number}>} corners Corners to be sorted.
-         * @returns {Array.<{x: number, y: number}>} Sorted corners.
+         * @param {Point[]} corners Corners to be sorted.
+         * @returns {Point[]} Sorted corners.
          */
         function sortCorners(corners) {
             const centroid = {
@@ -1378,11 +1380,10 @@ class ShapeCollectionController {
         /**
          * Generate in-between points from p1 to p2.
          *
-         * @param {{x: number, y: number}} p1 Starting points.
-         * @param {{x: number, y: number}} p2 Ending points.
+         * @param {Point} p1 Starting points.
+         * @param {Point} p2 Ending points.
          * @param {number} numOfPoints Number of point to interpolate, excluding p1 and p2.
-         * @returns {Array.<{x: number, y: number}>} Generated points, including p1 and p2,
-         *                                           so that its length is numOfPoints + 2.
+         * @returns {Point[]} Generated points, including p1 and p2, so that its length is numOfPoints + 2.
          */
         function linearInterpolatePoints(p1, p2, numOfPoints) {
             const x_step = (p2.x - p1.x - numOfPoints * SPACING) / (numOfPoints + 1);
@@ -1494,7 +1495,6 @@ class ShapeCollectionController {
 
 class ShapeCollectionView {
     /**
-     *
      * @param {ShapeCollectionModel} collectionModel
      * @param {ShapeCollectionController} collectionController
      */
@@ -1516,8 +1516,11 @@ class ShapeCollectionView {
         this._colorByGroupCheckbox = $('#colorByGroupCheckbox');
         this._filterView = new FilterView(this._controller.filterController);
         this._enabledProjectionCheckbox = $('#projectionLineEnable');
+
+        /** @type {ShapeView[]} */
         this._currentViews = [];
 
+        /** @type {ShapeModel[]} */
         this._currentModels = [];
         this._frameMarker = null;
 
@@ -1626,7 +1629,7 @@ class ShapeCollectionView {
             }
 
             const { frameWidth, frameHeight } = window.cvat.player.geometry;
-            const pos = window.cvat.translate.point.clientToCanvas(this._frameBackground[0], e.clientX, e.clientY);
+            const pos = window.cvat.translate.point.clientToCanvas(this._frameBackground[0], e.clientX, e.clientY);    // clientX/Y: viewport coordinate.
             if (pos.x >= 0 && pos.y >= 0 && pos.x <= frameWidth && pos.y <= frameHeight) {
                 if (!window.cvat.mode) {
                     this._controller.selectShape(pos, false);
@@ -1928,14 +1931,16 @@ class ShapeCollectionView {
 
     /**
      * Callback used to receive update from ShapeCollectionModel.
-     * The ShapeCollectionModel (the publisher) is modified here. The _frameContent and _UIContent is detached, but not deleted,
-     * so subsequent calls can continue to update it and finally attach (append()) it when appropriate.
+     * The ShapeCollectionModel (the publisher) is modified here. The _frameContent and _UIContent
+     * are detached, but not deleted so subsequent calls can continue to update and finally
+     * attach (append()) them back when appropriate.
      *
      * @param {ShapeCollectionModel} collection Current ShapeCollectionModel.
      */
     onCollectionUpdate(collection) {
         // Save parents and detach elements from DOM
-        // in order to increase performance in the buildShapeView function (ol' trick of drawing on hidden element to avoid reflow)
+        // in order to increase performance in the buildShapeView function
+        // (ol' trick of drawing on hidden element to avoid reflow).
         const parents = {
             uis: this._UIContent.parent(),
             shapes: this._frameContent.node.parentNode,
@@ -2059,12 +2064,21 @@ class ShapeCollectionView {
                 window.cvat.mode = null;
             }
             break;
-        case 'resize':
-            if (view.resize) {
-                window.cvat.mode = 'resize';
-            } else if (window.cvat.mode === 'resize') {
+        case 'resizestart':
+            window.cvat.mode = 'resize';
+
+            this.prepareResizeAdjacent(view);
+            this.startResizeAdjacent(view.resizeDetail.event);
+            break;
+        case 'resizing':
+            this.updateResizeAdjacent(view.resizeDetail.event);
+            break;
+        case 'resizedone':
+            if (window.cvat.mode === 'resize') {
                 window.cvat.mode = null;
             }
+
+            this.stopResizeAdjacent();
             break;
         case 'remove': {
             const idx = this._currentViews.indexOf(view);
@@ -2086,6 +2100,133 @@ class ShapeCollectionView {
         case 'hidden':
             this._updateLabelUIsState();
             break;
+        }
+    }
+
+    /**
+     * Given a splittable ShapeView, create a list of shapes adjacent to it.
+     * For adjacent criteria, see isAdjacent() in shapes.js.
+     * This function only runs if a new shape is selected and populates this._adjacentToActive,
+     * so that subsequent resizing don't have to scan the whole list of views/shapes.
+     *
+     * @param {ShapeView} shapeView A splittable ShapeView (currently BoxModel and PolygonModel only).
+     */
+    prepareResizeAdjacent(shapeView) {
+        if (this.lastResized === shapeView) {
+            // Don't have to prepare anymore.
+            // When another corner of the same shape is selected, or the corner is left-clicked,
+            // a new resizestart event is fired. Without checking, this function is called redundantly.
+            return;
+        }
+
+        /** @type {ShapeView} */
+        this.lastResized = shapeView;
+
+        // Reset shape views' resize handlers.
+        // These initialization/reset code should be done whenever a new shape is selected,
+        // but it is delayed until now, when clicking a corner happens.
+        if (this.adjacentToLastResized) {
+            for (const adjacent of this.adjacentToLastResized) {
+                adjacent._uis.shape
+                    .selectize(false, {
+                        deepSelect: true,
+                    })
+                    .resize(false);
+            }
+        }
+
+        /**
+         * A sublist of this._currentViews, holding the shapes adjacent
+         * to the current one.
+         *
+         * @type {ShapeView[]}
+         */
+        this.adjacentToLastResized = [];
+
+        /**
+         * A sublist of this.adjacentToLastResized, holding the shapes
+         * resized by resizing a certain point of the current shape.
+         */
+        this.resizedByLastResized = [];
+
+        if (!shapeView.controller().model().splittable) {
+            return;
+        }
+
+        // Filter adjacent shapes.
+        const shapeModel = shapeView.controller().model();
+        for (const view of this._currentViews) {
+            const model = view.controller().model();
+            if (model.frame === shapeModel.frame && view !== shapeView      // Frame number check is also used in isAdjacent()
+                && model.splittable && model.isAdjacentTo(shapeModel)) {    // It is used here to speed shit up.
+                this.adjacentToLastResized.push(view);
+            }
+        }
+    }
+
+    /**
+     * Filter adjacent shapes that is actually resized.
+     *
+     * @param {Object} resizeDetail
+     */
+    startResizeAdjacent(resizeDetail) {
+        let mousePos = { x: resizeDetail.detail.x, y: resizeDetail.detail.y };
+        mousePos = window.cvat.translate.point.clientToCanvas(this._frameBackground[0], mousePos.x, mousePos.y);
+
+        for (const adjacent of this.adjacentToLastResized) {
+            const model = adjacent.controller().model();
+            const indexOfAdjacentCorner = model.indexOfCornerAdjacentTo(mousePos);
+
+            if (indexOfAdjacentCorner !== -1) {
+                // Populate this.resizedByLastResized
+                this.resizedByLastResized.push(adjacent);
+
+                // Get resize handler
+                let resizeHandler = adjacent._uis.shape.remember('_resizeHandler');
+                if (!resizeHandler) {
+                    resizeHandler = adjacent._uis.shape
+                        .selectize({
+                            points: [],    // Don't draw points
+                            classRect: 'shapeSelect',
+                            rotationPoint: false,
+                            // pointSize: POINT_RADIUS * 2 / window.cvat.player.geometry.scale,
+                            deepSelect: true,
+                        })
+                        .resize({
+                            snapToGrid: 0.1,
+                        })
+                        .remember('_resizeHandler');
+                }
+
+                // Initialize resizing
+                resizeDetail.detail.i = indexOfAdjacentCorner;
+                resizeHandler.resize(resizeDetail);
+            }
+        }
+    }
+
+    /**
+     * Resize adjacent shapes together.
+     * This function uses this.resizedByLastResized.
+     *
+     * @param {CustomEvent} resizeEvent
+     */
+    updateResizeAdjacent(resizeEvent) {
+        for (const resized of this.resizedByLastResized) {
+            const resizeHandler = resized._uis.shape.remember('_resizeHandler');
+            if (resizeHandler) {
+                resizeHandler.update(resizeEvent);
+            }
+        }
+    }
+
+    stopResizeAdjacent() {
+        for (const resized of this.resizedByLastResized) {
+            resized._uis.shape
+                .selectize(false, {
+                    deepSelect: true,
+                })
+                .resize(false);
         }
     }
 

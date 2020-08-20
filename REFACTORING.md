@@ -26,6 +26,7 @@ The below graph illustrates a simplified chain of notification. The notation `A 
 
 ```mermaid
 graph LR;
+    ShapeCreatorModel -- onShapeCreatorUpdate --> ShapeCollectionModel
     ShapeCollectionModel -- onCollectionUpdate --> ShapeCollectionView
     ShapeModel -- onShapeUpdate --> ShapeCollectionModel
     ShapeView -- onShapeViewUpdate --> ShapeCollectionView
