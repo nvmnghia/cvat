@@ -370,10 +370,12 @@ class AAMView {
         this._frameContent = SVG.adopt($('#frameContent')[0]);
         this._controller = aamController;
 
-        this._zoomMargin.on('change', (e) => {
-            const value = +e.target.value;
-            this._controller.setMargin(value);
-        }).trigger('change');
+        this._zoomMargin
+            .on('change', (e) => {
+                const value = +e.target.value;
+                this._controller.setMargin(value);
+            })
+            .trigger('change');
         aamModel.subscribe(this);
     }
 
@@ -394,23 +396,32 @@ class AAMView {
                 height: window.cvat.player.geometry.frameHeight,
             });
 
-            const excludeField = this._frameContent.rect(size.width, size.height).move(size.x, size.y).fill('#666');
+            const excludeField = this._frameContent
+                .rect(size.width, size.height)
+                .move(size.x, size.y)
+                .fill('#666');
             let includeField = null;
 
             if (type === 'box') {
                 pos = window.cvat.translate.box.actualToCanvas(pos);
-                includeField = this._frameContent.rect(pos.xbr - pos.xtl,
-                    pos.ybr - pos.ytl).move(pos.xtl, pos.ytl);
+                includeField = this._frameContent
+                    .rect(pos.xbr - pos.xtl, pos.ybr - pos.ytl)
+                    .move(pos.xtl, pos.ytl);
             } else {
                 pos.points = window.cvat.translate.points.actualToCanvas(pos.points);
                 includeField = this._frameContent.polygon(pos.points);
             }
 
-            this._frameContent.mask().add(excludeField)
-                .add(includeField).fill('black')
+            this._frameContent
+                .mask()
+                .add(excludeField)
+                .add(includeField)
+                .fill('black')
                 .attr('id', 'outsideMask');
-            this._frameContent.rect(size.width, size.height)
-                .move(size.x, size.y).attr({
+            this._frameContent
+                .rect(size.width, size.height)
+                .move(size.x, size.y)
+                .attr({
                     mask: 'url(#outsideMask)',
                     id: 'outsideRect',
                 });

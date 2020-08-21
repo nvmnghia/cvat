@@ -286,21 +286,21 @@ function setupMenu(job, task, shapeCollectionModel,
             for (const labelId in byLabelsStat) {
                 if (Object.prototype.hasOwnProperty.call(byLabelsStat, labelId)) {
                     $(`<tr>
-                    <td class="semiBold"> ${window.cvat.labelsInfo.labels()[labelId].normalize()} </td>
-                    <td> ${byLabelsStat[labelId].boxes.annotation} </td>
-                    <td> ${byLabelsStat[labelId].boxes.interpolation} </td>
-                    <td> ${byLabelsStat[labelId].polygons.annotation} </td>
-                    <td> ${byLabelsStat[labelId].polygons.interpolation} </td>
-                    <td> ${byLabelsStat[labelId].polylines.annotation} </td>
-                    <td> ${byLabelsStat[labelId].polylines.interpolation} </td>
-                    <td> ${byLabelsStat[labelId].points.annotation} </td>
-                    <td> ${byLabelsStat[labelId].points.interpolation} </td>
-                    <td> ${byLabelsStat[labelId].cuboids.annotation} </td>
-                    <td> ${byLabelsStat[labelId].cuboids.interpolation} </td>
-                    <td> ${byLabelsStat[labelId].manually} </td>
-                    <td> ${byLabelsStat[labelId].interpolated} </td>
-                    <td class="semiBold"> ${byLabelsStat[labelId].total} </td>
-                </tr>`).addClass('temporaryStatisticRow').appendTo(table);
+                        <td class="semiBold"> ${window.cvat.labelsInfo.labels()[labelId].normalize()} </td>
+                        <td> ${byLabelsStat[labelId].boxes.annotation} </td>
+                        <td> ${byLabelsStat[labelId].boxes.interpolation} </td>
+                        <td> ${byLabelsStat[labelId].polygons.annotation} </td>
+                        <td> ${byLabelsStat[labelId].polygons.interpolation} </td>
+                        <td> ${byLabelsStat[labelId].polylines.annotation} </td>
+                        <td> ${byLabelsStat[labelId].polylines.interpolation} </td>
+                        <td> ${byLabelsStat[labelId].points.annotation} </td>
+                        <td> ${byLabelsStat[labelId].points.interpolation} </td>
+                        <td> ${byLabelsStat[labelId].cuboids.annotation} </td>
+                        <td> ${byLabelsStat[labelId].cuboids.interpolation} </td>
+                        <td> ${byLabelsStat[labelId].manually} </td>
+                        <td> ${byLabelsStat[labelId].interpolated} </td>
+                        <td class="semiBold"> ${byLabelsStat[labelId].total} </td>
+                    </tr>`).addClass('temporaryStatisticRow').appendTo(table);
                 }
             }
 

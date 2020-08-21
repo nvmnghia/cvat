@@ -745,6 +745,10 @@ class PlayerController {
 
 
 class PlayerView {
+    /**
+     * @param {PlayerModel} playerModel
+     * @param {PlayerController} playerController
+     */
     constructor(playerModel, playerController) {
         this._controller = playerController;
         this._playerUI = $('#playerFrame');
@@ -998,9 +1002,7 @@ class PlayerView {
             window.cvat.frozen = false;
         }
 
-        const { image } = model;
-        const { frames } = model;
-        const { geometry } = model;
+        const { image, frames, geometry } = model;
 
         if (!image) {
             this._loadingUI.removeClass('hidden');

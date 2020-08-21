@@ -85,7 +85,6 @@ window.addEventListener('DOMContentLoaded', () => {
         return constructorDecorator;
     }
 
-
     function ShapeCreatorViewWrapper(OriginalClass) {
         // Constructor will patch some properties for each instance
         function constructorDecorator(...args) {
@@ -100,10 +99,14 @@ window.addEventListener('DOMContentLoaded', () => {
                     return;
                 }
 
-                instance._drawInstance = instance._frameContent.polyline().draw({ snapToGrid: 0.1 }).addClass('shapeCreation').attr({
-                    'stroke-width': 0,
-                    z_order: Number.MAX_SAFE_INTEGER,
-                });
+                instance._drawInstance = instance._frameContent
+                    .polyline()
+                    .draw({ snapToGrid: 0.1 })
+                    .addClass('shapeCreation')
+                    .attr({
+                        'stroke-width': 0,
+                        z_order: Number.MAX_SAFE_INTEGER,
+                    });
                 instance._createPolyEvents();
 
                 /* the _createPolyEvents method have added "drawdone"
@@ -111,93 +114,95 @@ window.addEventListener('DOMContentLoaded', () => {
                 * because of that reason we remove the handler and
                 * create the valid handler instead
                 */
-                instance._drawInstance.off('drawdone').on('drawdone', (e) => {
-                    let actualPoints = window.cvat.translate.points.canvasToActual(e.target.getAttribute('points'));
-                    actualPoints = PolyShapeModel.convertStringToNumberArray(actualPoints);
+                instance._drawInstance
+                    .off('drawdone')
+                    .on('drawdone', (e) => {
+                        let actualPoints = window.cvat.translate.points.canvasToActual(e.target.getAttribute('points'));
+                        actualPoints = PolyShapeModel.convertStringToNumberArray(actualPoints);
 
-                    if (actualPoints.length < 4) {
-                        showMessage('It is need to specify minimum four extreme points for an object');
-                        instance._controller.switchCreateMode(true);
-                        return;
-                    }
+                        if (actualPoints.length < 4) {
+                            showMessage('It is need to specify minimum four extreme points for an object');
+                            instance._controller.switchCreateMode(true);
+                            return;
+                        }
 
-                    const { frameWidth } = window.cvat.player.geometry;
-                    const { frameHeight } = window.cvat.player.geometry;
-                    for (let idx = 0; idx < actualPoints.length; idx += 1) {
-                        const point = actualPoints[idx];
-                        point.x = Math.clamp(point.x, 0, frameWidth);
-                        point.y = Math.clamp(point.y, 0, frameHeight);
-                    }
+                        const { frameWidth } = window.cvat.player.geometry;
+                        const { frameHeight } = window.cvat.player.geometry;
+                        for (let idx = 0; idx < actualPoints.length; idx += 1) {
+                            const point = actualPoints[idx];
+                            point.x = Math.clamp(point.x, 0, frameWidth);
+                            point.y = Math.clamp(point.y, 0, frameHeight);
+                        }
 
-                    e.target.setAttribute('points',
-                        window.cvat.translate.points.actualToCanvas(
-                            PolyShapeModel.convertNumberArrayToString(actualPoints),
-                        ));
+                        e.target.setAttribute('points',
+                            window.cvat.translate.points.actualToCanvas(
+                                PolyShapeModel.convertNumberArrayToString(actualPoints),
+                            ));
 
-                    const polybox = e.target.getBBox();
-                    const area = polybox.width * polybox.height;
+                        const polybox = e.target.getBBox();
+                        const area = polybox.width * polybox.height;
 
-                    if (area > AREA_TRESHOLD) {
-                        $.ajax({
-                            url: `/dextr/create/${window.cvat.job.id}`,
-                            type: 'POST',
-                            data: JSON.stringify({
-                                frame: window.cvat.player.frames.current,
-                                points: actualPoints,
-                            }),
-                            contentType: 'application/json',
-                            success: () => {
-                                function intervalCallback() {
-                                    $.ajax({
-                                        url: `/dextr/check/${window.cvat.job.id}`,
-                                        type: 'GET',
-                                        success: (jobData) => {
-                                            if (['queued', 'started'].includes(jobData.status)) {
-                                                if (jobData.status === 'queued') {
-                                                    dextrCancelButton.prop('disabled', false);
-                                                }
-                                                setTimeout(intervalCallback, 1000);
-                                            } else {
-                                                dextrOverlay.addClass('hidden');
-                                                if (jobData.status === 'finished') {
-                                                    if (jobData.result) {
-                                                        instance._controller.finish({ points: jobData.result }, 'polygon');
+                        if (area > AREA_TRESHOLD) {
+                            $.ajax({
+                                url: `/dextr/create/${window.cvat.job.id}`,
+                                type: 'POST',
+                                data: JSON.stringify({
+                                    frame: window.cvat.player.frames.current,
+                                    points: actualPoints,
+                                }),
+                                contentType: 'application/json',
+                                success: () => {
+                                    function intervalCallback() {
+                                        $.ajax({
+                                            url: `/dextr/check/${window.cvat.job.id}`,
+                                            type: 'GET',
+                                            success: (jobData) => {
+                                                if (['queued', 'started'].includes(jobData.status)) {
+                                                    if (jobData.status === 'queued') {
+                                                        dextrCancelButton.prop('disabled', false);
                                                     }
-                                                } else if (jobData.status === 'failed') {
-                                                    const message = `Segmentation has fallen. Error: '${jobData.stderr}'`;
-                                                    showMessage(message);
+                                                    setTimeout(intervalCallback, 1000);
                                                 } else {
-                                                    let message = `Check segmentation request returned "${jobData.status}" status.`;
-                                                    if (jobData.stderr) {
-                                                        message += ` Error: ${jobData.stderr}`;
+                                                    dextrOverlay.addClass('hidden');
+                                                    if (jobData.status === 'finished') {
+                                                        if (jobData.result) {
+                                                            instance._controller.finish({ points: jobData.result }, 'polygon');
+                                                        }
+                                                    } else if (jobData.status === 'failed') {
+                                                        const message = `Segmentation has fallen. Error: '${jobData.stderr}'`;
+                                                        showMessage(message);
+                                                    } else {
+                                                        let message = `Check segmentation request returned "${jobData.status}" status.`;
+                                                        if (jobData.stderr) {
+                                                            message += ` Error: ${jobData.stderr}`;
+                                                        }
+                                                        showMessage(message);
                                                     }
-                                                    showMessage(message);
                                                 }
-                                            }
-                                        },
-                                        error: (errorData) => {
-                                            dextrOverlay.addClass('hidden');
-                                            const message = `Can not check segmentation. Code: ${errorData.status}.`
+                                            },
+                                            error: (errorData) => {
+                                                dextrOverlay.addClass('hidden');
+                                                const message = `Can not check segmentation. Code: ${errorData.status}.`
                                                 + ` Message: ${errorData.responseText || errorData.statusText}`;
-                                            showMessage(message);
-                                        },
-                                    });
-                                }
+                                                showMessage(message);
+                                            },
+                                        });
+                                    }
 
-                                dextrCancelButton.prop('disabled', true);
-                                dextrOverlay.removeClass('hidden');
-                                setTimeout(intervalCallback, 1000);
-                            },
-                            error: (errorData) => {
-                                const message = `Can not cancel ReID process. Code: ${errorData.status}.`
+                                    dextrCancelButton.prop('disabled', true);
+                                    dextrOverlay.removeClass('hidden');
+                                    setTimeout(intervalCallback, 1000);
+                                },
+                                error: (errorData) => {
+                                    const message = `Can not cancel ReID process. Code: ${errorData.status}.`
                                     + ` Message: ${errorData.responseText || errorData.statusText}`;
-                                showMessage(message);
-                            },
-                        });
-                    }
+                                    showMessage(message);
+                                },
+                            });
+                        }
 
-                    instance._controller.switchCreateMode(true);
-                }); // end of "drawdone" handler
+                        instance._controller.switchCreateMode(true);
+                    }); // end of "drawdone" handler
             }; // end of _create() method
 
             return instance;
