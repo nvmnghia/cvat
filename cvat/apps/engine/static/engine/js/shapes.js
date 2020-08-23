@@ -1784,10 +1784,17 @@ class PolygonModel extends PolyShapeModel {
 /** ****************************** SHAPE CONTROLLERS  ******************************* */
 
 class ShapeController {
+    /**
+     * @param {ShapeModel}
+     */
     constructor(shapeModel) {
         this._model = shapeModel;
     }
 
+    /**
+     * @param {number} frame
+     * @param {Object} position
+     */
     updatePosition(frame, position) {
         this._model.updatePosition(frame, position);
     }
@@ -2050,11 +2057,12 @@ class ShapeView extends Listener {
                         // Corner's mousedown callback.
                         objWasResized = false;
                         this._flags.resizing = true;
-                        this.resizeDetail = event.detail;    // Other ugly options: 1. Get ShapeCollectionView from listeners. 2. Add another on('...') in ShapeCollectionView.
                         events.resize = Logger.addContinuedEvent(Logger.EventType.resizeObject);
 
                         blurAllElements();
                         this._hideShapeText();
+
+                        this.resizeDetail = event.detail;    // Other ugly options: 1. Get ShapeCollectionView from listeners. 2. Add another on('...') in ShapeCollectionView.
                         this.notify('resizestart');
                     })
                     .on('resizing', event => {
@@ -2067,8 +2075,8 @@ class ShapeView extends Listener {
                         // Corner's mouseup callback.
                         events.resize.close();
                         events.resize = null;
-                        this.resizeDetail = null;
                         this._flags.resizing = false;
+                        this.resizeDetail = { objWasResized };
                         if (objWasResized) {
                             const frame = window.cvat.player.frames.current;
                             this._controller.updatePosition(frame, this._buildPosition());
@@ -2076,6 +2084,7 @@ class ShapeView extends Listener {
                         }
 
                         this._showShapeText();
+
                         this.notify('resizedone');
                     });
 
@@ -3606,37 +3615,67 @@ class PolygonView extends PolyShapeView {
     }
 
     /**
-     * See BoxView's implementation comment.
+     * Initialize resize handler.
+     * Only used in ShapeCollectionView::startResizeAdjacent().
      *
-     * @param {{x: number, y: number, event: Object}} resizeDetail Detail of the resize operation.
+     * @param {CustomEvent} resizeEvent
      */
-    resizeByMouseEvent(resizeDetail) {
-        const mousePos = { x: resizeDetail.dx, y: resizeDetail.dy };
-        const model = this.controller().model();
-        const thisCorners = PolyShapeModel.convertStringToNumberArray(model._positions[model.frame].points);
+    startResizeByAdjacent(resizeEvent) {
+        // Get resize handler
+        let resizeHandler = this._uis.shape.remember('_resizeHandler');
+        if (!resizeHandler) {
+            resizeHandler = this._uis.shape
+                .selectize({
+                    points: [],    // Don't draw points
+                    classRect: 'shapeSelect',
+                    rotationPoint: false,
+                    // pointSize: POINT_RADIUS * 2 / window.cvat.player.geometry.scale,
+                    deepSelect: true,
+                })
+                .resize({
+                    snapToGrid: 0.1,
+                    ignoreEvent: false,    // TODO: Suppress event without modifying svg.resize.js.
+                })
+                .remember('_resizeHandler');
+        }
 
-        // for (const corner of thisCorners) {
-        //     if (isAdjacent(corner, mousePos)) {
-        //         let resizeHandler = this._uis.shape.remember('_resizeHandler');
-        //         if (!resizeHandler) {
-        //             resizeHandler = this._uis.shape
-        //                 .selectize({
-        //                     points: [],    // Don't draw points
-        //                     classRect: 'shapeSelect',
-        //                     rotationPoint: false,
-        //                     // pointSize: POINT_RADIUS * 2 / window.cvat.player.geometry.scale,
-        //                     deepSelect: true,
-        //                 })
-        //                 .resize({
-        //                     snapToGrid: 0.1,
-        //                 })
-        //                 .remember('_resizeHandler');
-        //         }
-        //         resizeHandler.resize(resizeDetail.event);
+        // Initialize resize handler.
+        resizeHandler.resize(resizeEvent);
+    }
 
-        //         break;
-        //     }
-        // }
+    /**
+     * Feed mouse data to resize handler to draw when resizing.
+     * Only used in ShapeCollectionView::updateResizeAdjacent().
+     *
+     * @param {MouseEvent|TouchEvent} mouseEvent Mouse event to feed to resize handler.
+     */
+    updateResizeByAdjacent(mouseEvent) {
+        const resizeHandler = this._uis.shape.remember('_resizeHandler');
+        if (resizeHandler) {
+            resizeHandler.update(mouseEvent);
+        } else {
+            console.log(`Premature calls ${this.controller().model().id}`);
+        }
+    }
+
+    /**
+     * Finish resizing: disable selectize & resize and save shape data.
+     * Only used in ShapeCollectionView::finishResizeAdjacent().
+     *
+     * @param {boolean} objWasResized Whether object is actually resized.
+     */
+    finishResizeByAdjacent(objWasResized) {
+        this._uis.shape
+            .selectize(false, {
+                deepSelect: true,
+            })
+            .resize(false);
+
+        if (objWasResized) {
+            // Copypasta from resizedone callback in _makeEditable().
+            const frame = window.cvat.player.frames.current;
+            this.controller().updatePosition(frame, this._buildPosition());
+        }
     }
 }
 

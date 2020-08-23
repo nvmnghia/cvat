@@ -14,18 +14,18 @@
 /**
  * No function modifies the input object in place, except the dash (for internal use).
  * There're 2 types of shape data, and only differ in how the coordinate is stored:
- *   - Server type
- *   - Client type
- * Each has slightly different structure.
+ *   - Server
+ *   - Client
  * There're 3 types of coordinate:
- *   - Image coordinate ("actual" in the code): for storing shape data.
- *   - Canvas coordinate: for drawing data.
- *   - Viewport coordinate (also refer to as "client"): for processing mouse event.
- * Somehow, converting between image and canvas coordinate systems is as simple as
- * adding or subtracting the _playerOffset value.
- *
- * TODO: recheck the 3 types of coordinate!
- * In the callback for mousemove of _frameContent, clientToCanvas return a image coordinate.
+ *   - Image ("actual" in the code): for storing shape data. Naturally, client and
+ *    server shapes use this coordinate system.
+ *   - Canvas: for drawing data. Even worse, but obviously, each canvas has its own
+ *    coordinate system:
+ *     + #frameContent: Same origin, pixel size,... as Image, but allows for negative
+ *       coordinate. The element itself holds the image.
+ *     + #playerFrame: 30000-ish width and height, used to actually draw UI in
+ *       _drawShapeUI(). Conversion uses _playerOffset.
+ *   - Viewport (also refer to as "client"): for processing mouse event.
  */
 class CoordinateTranslator {
     constructor() {
@@ -181,8 +181,8 @@ class CoordinateTranslator {
             /**
              * The reverse of actualToCanvas().
              *
-             * @param {Object} actualPoints Client points data in canvas coordinate.
-             * @returns {Object} Client points data, converted to image coordinate.
+             * @param {string|Object} actualPoints Client points data in canvas coordinate.
+             * @returns {string|Object} Client points data, converted to image coordinate.
              */
             canvasToActual(canvasPoints) {
                 return this._convert(canvasPoints, -1);
@@ -198,7 +198,7 @@ class CoordinateTranslator {
             serverToClient(shape) {
                 return {
                     points: shape.points
-                        .reduce((acc, el, idx, src) => {
+                        .reduce((acc, _, idx, src) => {
                             // Add 2 consecutive values in even idx, do nothing otherwise.
                             if (idx % 2 === 0) {
                                 acc.push([src[idx], src[idx + 1]]);
