@@ -72,7 +72,7 @@ const TEXT_MARGIN = 10;
  */
 
 /**
- * Position of the box, along with some metadata for rendering.
+ * Position of a box, along with some metadata for rendering.
  *
  * @typedef BoxPosition
  * @type {object}
@@ -1222,6 +1222,11 @@ class PolyShapeModel extends ShapeModel {
             { outside: leftPos.outside || leftFrame !== frame });
     }
 
+    /**
+     * @param {number} frame
+     * @param {Object} position
+     * @param {boolean} silent
+     */
     updatePosition(frame, position, silent) {
         const box = {
             xtl: Number.MAX_SAFE_INTEGER,
@@ -1382,7 +1387,7 @@ class PolyShapeModel extends ShapeModel {
      * Deserialize points (serialized in window.cvat.translate.points.serverToClient).
      *
      * @param {string} serializedPoints Serialized points.
-     * @returns {Point[]} Deserialized point coordinates.
+     * @returns {Point[]} Deserialized points.
      */
     static convertStringToNumberArray(serializedPoints) {
         // const pointArray = [];
@@ -1405,6 +1410,12 @@ class PolyShapeModel extends ShapeModel {
             });
     }
 
+    /**
+     * The reverse of convertStringToNumberArray().
+     *
+     * @param {Point[]} arrayPoints Deserialized points.
+     * @returns {string} Serialized points.
+     */
     static convertNumberArrayToString(arrayPoints) {
         return arrayPoints.map(point => `${point.x},${point.y}`).join(' ');
     }
@@ -2000,11 +2011,9 @@ class ShapeView extends Listener {
     }
 
     /**
-     * Make THIS shape (not all shapes) editable (resize, drag,...)
-     * by showing corner points for user to drag.
-     * This function is called whenever the shape is selected,
-     * not a one-time setup, because it actually shows the corners,
-     * instead of just setting callbacks.
+     * Make THIS shape (not all shapes) editable (resize, drag,...) by showing draggable corners.
+     * This function is called whenever the shape is selected, not a one-time setup,
+     * as it actually shows the corners, instead of just setting callbacks.
      */
     _makeEditable() {
         if (this._uis.shape && this._uis.shape.node.parentElement && !this._flags.editable) {
@@ -2201,7 +2210,7 @@ class ShapeView extends Listener {
                 .selectize(false, {
                     deepSelect: true,
                 })
-                .resize(false);
+                .resize(false);    // Why? Shouldn't it be 'stop' instead of false?
 
             if (this._flags.resizing) {
                 this._flags.resizing = false;
@@ -3623,7 +3632,7 @@ class PolygonView extends PolyShapeView {
     startResizeByAdjacent(resizeEvent) {
         // Get resize handler
         let resizeHandler = this._uis.shape.remember('_resizeHandler');
-        if (!resizeHandler) {
+        if (!resizeHandler || !resizeHandler.options.ignoreEvent) {
             resizeHandler = this._uis.shape
                 .selectize({
                     points: [],    // Don't draw points
@@ -3634,7 +3643,7 @@ class PolygonView extends PolyShapeView {
                 })
                 .resize({
                     snapToGrid: 0.1,
-                    ignoreEvent: false,    // TODO: Suppress event without modifying svg.resize.js.
+                    ignoreEvent: true,    // TODO: Suppress event without modifying svg.resize.js.
                 })
                 .remember('_resizeHandler');
         }
@@ -3669,7 +3678,7 @@ class PolygonView extends PolyShapeView {
             .selectize(false, {
                 deepSelect: true,
             })
-            .resize(false);
+            .resize('stop');
 
         if (objWasResized) {
             // Copypasta from resizedone callback in _makeEditable().

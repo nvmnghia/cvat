@@ -1636,6 +1636,10 @@ class ShapeCollectionView {
             }
         });
 
+        this._frameContent.node.addEventListener('mouseup', e => {
+            console.log(e);
+        }, true);
+
         this._frameContent.on('mousedown', (e) => {
             if (e.target === this._frameContent.node) {
                 this._controller.resetActive();
@@ -1809,7 +1813,8 @@ class ShapeCollectionView {
 
             const title = $(`<label> ${labels[labelId]} </label>`);
 
-            const mainDiv = $('<div> </div>').addClass('labelContentElement h2 regular hidden')
+            const mainDiv = $('<div> </div>')
+                .addClass('labelContentElement h2 regular hidden')
                 .css({
                     'background-color': collectionController.colorsByGroup(+window.cvat.labelsInfo.labelColorIdx(+labelId)),
                 })

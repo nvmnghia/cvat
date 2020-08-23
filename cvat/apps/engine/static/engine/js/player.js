@@ -797,8 +797,7 @@ class PlayerView {
         this._playerContentUI.on('mousedown', (e) => {
             const pos = window.cvat.translate.point.clientToCanvas(this._playerBackgroundUI[0],
                 e.clientX, e.clientY);
-            const { frameWidth } = window.cvat.player.geometry;
-            const { frameHeight } = window.cvat.player.geometry;
+            const { frameWidth, frameHeight } = window.cvat.player.geometry;
             if (pos.x >= 0 && pos.y >= 0 && pos.x <= frameWidth && pos.y <= frameHeight) {
                 this._controller.frameMouseDown(e);
             }
