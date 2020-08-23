@@ -625,17 +625,16 @@ class ShapeModel extends Listener {
      * In that case, the removed model (a BoxModel) is also returned,
      * so that undo and redo is possible.
      *
-     * @param {?boolean} disableUndoRedo Disable undo/redo, as splitting
-     *                                   has its own undo/redo code.
+     * @param {?boolean} silent Disable undo/redo, as custom/mixed operation has its own undo/redo code.
      * @returns {?BoxModel} Returns the deleted model if disableUndoRedo is true.
      */
-    remove(disableUndoRedo = false) {
+    remove(silent = false) {
         Logger.addEvent(Logger.EventType.deleteObject, { count: 1 });
 
         // Also notify subscribers.
         this.removed = true;
 
-        if (!disableUndoRedo) {
+        if (!silent) {
             // Undo/redo code
             window.cvat.addAction(
                 'Remove Object',
@@ -793,13 +792,15 @@ class ShapeModel extends Listener {
 
     /**
      * Check if the shape can be split geometrically (not to be confused with split interpolation feature).
-     * The shape is splittable only if it is an annotated shape, and must be either a BoxModel or PolygonModel.
+     * The shape is splittable only if it satisfies all three requirements:
+     *   - It is an annotated shape
+     *   - It is a convex quadrilateral
+     *   - It is either a BoxModel or PolygonModel.
+     *
+     * @returns {boolean} Whether the shape is geometrically splittable.
      */
     get splittable() {
-        return this.type.split('_')[0] === 'annotation' && (
-            this instanceof BoxModel
-            || this instanceof PolygonModel
-        );
+        return false;
     }
 }
 
@@ -878,6 +879,11 @@ class BoxModel extends ShapeModel {
         return ((box.xbr - box.xtl) * (box.ybr - box.ytl) >= AREA_TRESHOLD);
     }
 
+    /**
+     * @param {number} frame
+     * @param {Object} position
+     * @param {boolean} silent Disable undo/redo, as custom/mixed operation has its own undo/redo code
+     */
     updatePosition(frame, position, silent) {
         const pos = {
             xtl: Math.clamp(position.xtl, 0, window.cvat.player.geometry.frameWidth),
@@ -980,6 +986,59 @@ class BoxModel extends ShapeModel {
         }
 
         return minDistance;
+    }
+
+    /**
+     * Get the calculator function to calculate child box position.
+     *
+     * @param {number} row Number of row.
+     * @param {number} col Number of column.
+     * @returns {Function} Function to calculate child box position.
+     */
+    getChildPositionFunc(row, col) {
+        const {
+            xtl, ytl, xbr, ybr,
+        } = this._positions[this.frame];
+
+        const width = xbr - xtl;
+        const childBoxWidth = width / col;
+        const height = ybr - ytl;
+        const childBoxHeight = height / row;
+
+        // Check if the split is feasible
+        if (childBoxWidth * childBoxHeight < AREA_TRESHOLD) {
+            return null;
+        }
+
+        /**
+         * Given the child row and column position in the grid, return its coordinate/positions.
+         *
+         * @param {number} i Row number of the child.
+         * @param {number} j Column number of the child.
+         * @returns {Object} Coordinates of the child (i.e. positions).
+         */
+        const getChildPosition = (i, j) => {
+            const c_xtl = xtl + j * childBoxWidth;
+            const c_xbr = c_xtl + childBoxWidth;
+            const c_ytl = ytl + i * childBoxHeight;
+            const c_ybr = c_ytl + childBoxHeight;
+
+            return {
+                xtl: c_xtl,
+                ytl: c_ytl,
+                xbr: c_xbr,
+                ybr: c_ybr,
+            };
+        };
+
+        return getChildPosition;
+    }
+
+    /**
+     * @inheritdoc
+     */
+    get splittable() {
+        return this.type.split('_')[0] === 'annotation';
     }
 
     /**
@@ -1225,7 +1284,7 @@ class PolyShapeModel extends ShapeModel {
     /**
      * @param {number} frame
      * @param {Object} position
-     * @param {boolean} silent
+     * @param {boolean} silent Disable undo/redo, as custom/mixed operation has its own undo/redo code
      */
     updatePosition(frame, position, silent) {
         const box = {
@@ -1751,6 +1810,15 @@ class PolygonModel extends PolyShapeModel {
     }
 
     /**
+     * @inheritdoc
+     */
+    get splittable() {
+        return this.type.split('_')[0] === 'annotation'
+        && (this._positions[this.frame].points.match(/,/g) || []).length === 4;    // 4 corners.
+        // && isConvex();    // TODO: convexity check.
+    }
+
+    /**
      * See BoxModel's implementation comment.
      *
      * @param {ShapeModel} shape Model of the shape to be checked.
@@ -1789,6 +1857,116 @@ class PolygonModel extends PolyShapeModel {
             }
         }
         return -1;
+    }
+
+    /**
+     * Get the calculator function to calculate child box position.
+     *
+     * @param {number} row Number of row.
+     * @param {number} col Number of column.
+     * @returns {Function} Function to calculate child box position.
+     */
+    getChildPositionFunc(row, col) {
+        const corners = PolyShapeModel.convertStringToNumberArray(this._positions[this.frame].points);
+
+        // Check if the split is feasible
+        if (corners.length !== 4) {
+            return null;
+        }
+
+        // points is a (row + 1) x (col + 1) matrix containing all points in the grid
+        const points = [...Array(row + 1)].map(() => Array(col + 1));
+
+        const lastRow = row;
+        const lastCol = col;
+
+        // First populate the 4 corners
+        [
+            points[0][0],                // top left
+            points[0][lastCol],          // top right
+            points[lastRow][lastCol],    // bottom right
+            points[lastRow][0],          // bottom left
+        ] = sortCorners(corners);
+
+        // Then populate the 2 side edges
+        // Yes edge points are reassigned along the way, for better code visibility.
+        const rightEdge = linearInterpolatePoints(points[0][lastCol], points[lastRow][lastCol], row - 1);
+        for (let i = 0; i < rightEdge.length; i++) points[i][lastCol] = rightEdge[i];
+        const leftEdge = linearInterpolatePoints(points[0][0], points[lastRow][0], row - 1);
+        for (let i = 0; i < leftEdge.length; i++) points[i][0] = leftEdge[i];
+
+        // Then fill the inside
+        for (let i = 0; i <= lastRow; i++) {
+            const line = linearInterpolatePoints(points[i][0], points[i][lastCol], col - 1);
+            for (let j = 0; j <= lastCol; j++) {
+                points[i][j] = line[j];
+            }
+        }
+
+        /**
+         * Given the child row and column position in the grid, return its coordinate/positions.
+         *
+         * @param {number} i Row number of the child.
+         * @param {number} j Column number of the child.
+         * @returns {Object} Coordinates of the child (i.e. positions).
+         */
+        const getChildPosition = (i, j) => {
+            const childPoints = [points[i][j], points[i][j + 1], points[i + 1][j + 1], points[i + 1][j]]
+                .map(point => `${point.x},${point.y}`)
+                .join(' ');
+
+            return {
+                points: childPoints,
+            };
+        };
+
+        return getChildPosition;
+
+        /**
+         * Sort 4 corners of a convex quadrilateral clockwise.
+         * The first corner is the top left.
+         *
+         * @param {Point[]} corners Corners to be sorted.
+         * @returns {Point[]} Sorted corners.
+         */
+        function sortCorners(corners) {
+            const centroid = {
+                x: corners.reduce((acc, corner) => acc + corner.x, 0) / 4,
+                y: corners.reduce((acc, corner) => acc + corner.y, 0) / 4,
+            };
+
+            return [
+                corners.find(corner => corner.x < centroid.x && corner.y < centroid.y),
+                corners.find(corner => corner.x > centroid.x && corner.y < centroid.y),
+                corners.find(corner => corner.x > centroid.x && corner.y > centroid.y),
+                corners.find(corner => corner.x < centroid.x && corner.y > centroid.y),
+            ];
+        }
+
+        /**
+         * Generate in-between points from p1 to p2.
+         *
+         * @param {Point} p1 Starting points.
+         * @param {Point} p2 Ending points.
+         * @param {number} numOfPoints Number of point to interpolate, excluding p1 and p2.
+         * @returns {Point[]} Generated points, including p1 and p2, so that its length is numOfPoints + 2.
+         */
+        function linearInterpolatePoints(p1, p2, numOfPoints) {
+            const x_step = (p2.x - p1.x) / (numOfPoints + 1);
+            const y_step = (p2.y - p1.y) / (numOfPoints + 1);
+
+            const points = new Array(numOfPoints + 2);
+            points[0] = p1;
+            for (let i = 1; i <= numOfPoints; i++) {
+                points[i] = {
+                    x: p1.x + i * x_step,
+                    y: p1.y + i * y_step,
+                };
+            }
+            points[numOfPoints + 1] = p2;
+
+            return points;
+        }
     }
 }
 

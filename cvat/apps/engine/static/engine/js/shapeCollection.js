@@ -68,7 +68,10 @@ class ShapeCollectionModel extends Listener {
         this._idx = 0;
         this._groupIdx = 0;
         this._frame = null;
+
+        /** @type {ShapeModel} */
         this._activeShape = null;
+
         this._flush = false;
 
         /**
@@ -445,7 +448,7 @@ class ShapeCollectionModel extends Listener {
     }
 
     /**
-     * Adding a shape (pressing N in CVAT).
+     * Add a shape.
      *
      * @param {Object} data  Shape data, including coordinates.
      * @param {string} type  Shape type string, of the following format:
@@ -476,6 +479,93 @@ class ShapeCollectionModel extends Listener {
             this._groups[groupIdx].push(model);
         }
         return model;
+    }
+
+    /**
+     * Given the number of row and column, split the active shape.
+     * This function first removes the shape, then adds child ones.
+     * The undo/redo is handled here.
+     *
+     * @param {number} row Number of row. 1 if don't split row.
+     * @param {number} col Number of column. 1 if don't split column.
+     */
+    splitActiveShape(row, col) {
+        if (row <= 0 || col <= 0 || !Number.isInteger(row) || !Number.isInteger(col)) {
+            return;
+        }
+        if (row === 1 && col === 1) {
+            return;
+        }
+
+        // TODO: check window.cvat.mode.
+        // TODO: move showMessage() out of Model. Ideas: see how ShapeCollectionModel pushes shits to ShapeCollectionView.
+        this.selectShape(this.lastPosition, false);
+        if (!this.activeShape.splittable) {
+            showMessage('This type of object does not support splitting.');
+            return;
+        }
+
+        const getChildPosition = this.activeShape.getChildPositionFunc(row, col);
+        if (!getChildPosition) {
+            showMessage('This type of object does not support splitting.');
+        }
+
+        // Delete the box
+        const parent = this.activeShape.remove(true);
+
+        // Add child boxes.
+        const children = [];
+        const basePosition = {
+            attributes: [],
+            frame: parent.frame,
+            group: parent.groupId,
+            label_id: parent.label,
+            occluded: parent._positions[parent.frame].occluded,
+            z_order: parent._positions[parent.frame].z_order,
+        };
+
+        for (let i = 0; i < row; ++i) {
+            for (let j = 0; j < col; ++j) {
+                const child = this.add(
+                    Object.assign({}, basePosition, getChildPosition(i, j)),
+                    parent.type,
+                );
+                children.push(child);
+            }
+        }
+
+        // Undo/redo
+        // Undo/redo add: ShapeCreatorModel::finish().
+        // Undo/redo remove: ShapeModel::remove().
+        window.cvat.addAction(
+            `Split ${parent.type.split('_')[1]}`,
+            () => {
+                // Undo create
+                for (const child of children) {
+                    child.removed = true;
+                    child.unsubscribe(this);
+                }
+
+                // Undo remove
+                parent.removed = false;
+
+                // TODO: check if update() is needed in undo/redo.
+                // this.update();
+            },
+            () => {
+                for (const child of children) {
+                    child.removed = false;
+                    child.subscribe(this);
+                }
+                parent.removed = true;
+
+                this.update();
+            },
+            window.cvat.player.frames.current,
+        );
+
+        // Trigger rendering.
+        this.update();
     }
 
     /**
@@ -1177,248 +1267,31 @@ class ShapeCollectionController {
     }
 
     /**
-     * Given the number of row and column, split the active rectangle.
-     * This function first removes the rectangle, then adds child ones.
-     * The undo/redo is handled here.
+     * Given the number of row and column, split the active shape.
      *
      * @param {number} row Number of row. 1 if don't split row.
      * @param {number} col Number of column. 1 if don't split column.
      */
-    splitActiveBox(row, col) {
-        if (row === 1 && col === 1) {
-            return;
-        }
-
-        // Margin between child boxes.
-        const SPACING = 10;
-
-        // TODO: check window.cvat.mode.
-        this._model.selectShape(this._model.lastPosition, false);
-        const { activeShape } = this._model;
-
-        let getChildPosition;
-        let typeOfShape;
-
-        // TODO: Move this whole if-else block to individual ShapeModel.
-        // TODO: Fix _positions[0] to _position[activeShape.frame] and use convertStringToNumberArray.
-        if (activeShape instanceof BoxModel) {
-            const {
-                xtl, ytl, xbr, ybr,
-            } = activeShape._positions[0];
-
-            const width = xbr - xtl;
-            const childBoxWidth = (width - SPACING * (col - 1)) / col;
-            const height = ybr - ytl;
-            const childBoxHeight = (height - SPACING * (row - 1)) / row;
-
-            // Check if the split is feasible
-            if (childBoxWidth * childBoxHeight < AREA_TRESHOLD) {
-                showMessage('The area of the child boxes are too small.');
-                return;
-            }
-
-            /**
-             * Given the child row and column position in the grid, return its coordinate/positions.
-             *
-             * @param {number} i Row number of the child.
-             * @param {number} j Column number of the child.
-             * @returns {Object} Coordinates of the child (i.e. positions).
-             */
-            getChildPosition = (i, j) => {
-                const c_xtl = xtl + j * (childBoxWidth + SPACING);
-                const c_xbr = c_xtl + childBoxWidth;
-                const c_ytl = ytl + i * (childBoxHeight + SPACING);
-                const c_ybr = c_ytl + childBoxHeight;
-
-                return {
-                    xtl: c_xtl,
-                    ytl: c_ytl,
-                    xbr: c_xbr,
-                    ybr: c_ybr,
-                };
-            };
-            typeOfShape = 'box';
-        } else if (activeShape instanceof PolygonModel) {
-            // points are serialized in the following format:
-            //   x0,y0 x1,y1...
-            const corners = PolyShapeModel.convertStringToNumberArray(activeShape._positions[0].points);
-
-            // Check if the split is feasible
-            if (corners.length !== 4) {
-                showMessage('Only quadrilateral can be splitted.');
-                return;
-            }
-
-            // corners is a (row + 1) x (col + 1) matrix containing all points in the grid
-            const points = [...Array(row + 1)].map(() => Array(col + 1));
-
-            const lastRow = row;
-            const lastCol = col;
-
-            // First populate the 4 corners
-            [
-                points[0][0],                // top left
-                points[0][lastCol],          // top right
-                points[lastRow][lastCol],    // bottom right
-                points[lastRow][0],          // bottom left
-            ] = sortCorners(corners);
-
-            // Then populate the 2 side edges
-            // Yes edge points are reassigned along the way, for better code visibility.
-            const rightEdge = linearInterpolatePoints(points[0][lastCol], points[lastRow][lastCol], row - 1);
-            for (let i = 0; i < rightEdge.length; i++) points[i][lastCol] = rightEdge[i];
-            const leftEdge = linearInterpolatePoints(points[0][0], points[lastRow][0], row - 1);
-            for (let i = 0; i < leftEdge.length; i++) points[i][0] = leftEdge[i];
-
-            // Then fill the inside
-            for (let i = 0; i <= lastRow; i++) {
-                const line = linearInterpolatePoints(points[i][0], points[i][lastCol], col - 1);
-                for (let j = 0; j <= lastCol; j++) {
-                    points[i][j] = line[j];
-                }
-            }
-
-            /**
-             * The same as the other one.
-             */
-            getChildPosition = (i, j) => {
-                const childPoints = [points[i][j], points[i][j + 1], points[i + 1][j + 1], points[i + 1][j]]
-                    .map(point => `${point.x},${point.y}`)
-                    .join(' ');
-
-                return {
-                    points: childPoints,
-                };
-            };
-            typeOfShape = 'polygon';
-        } else {
-            showMessage('This type of object does not support splitting.');
-            return;
-        }
-
-        // Delete the box
-        const parent = this.removeActiveShape(
-            { shiftKey: true },    // TODO: Check Shift and lock.
-            true,                  // No undo/redo, it will be handled here.
-        );
-
-        // Add child boxes.
-        const children = [];
-        const basePosition = {
-            attributes: [],
-            frame: parent.frame,
-            group: parent.groupId,
-            label_id: parent.label,
-            occluded: parent._positions[0].occluded,
-            z_order: parent._positions[0].z_order,
-        };
-
-        for (let i = 0; i < row; ++i) {
-            for (let j = 0; j < col; ++j) {
-                const child = this._model.add(
-                    Object.assign({}, basePosition, getChildPosition(i, j)),
-                    `annotation_${typeOfShape}`,
-                );
-                children.push(child);
-            }
-        }
-
-        // Undo/redo
-        // Undo/redo add: ShapeCreatorModel::finish().
-        // Undo/redo remove: ShapeModel::remove().
-        window.cvat.addAction(
-            `Split ${typeOfShape}`,
-            () => {
-                // Undo create
-                for (const child of children) {
-                    child.removed = true;
-                    child.unsubscribe(this._model);
-                }
-
-                // Undo remove
-                parent.removed = false;
-
-                // TODO: check if update() is needed in undo/redo.
-                // this._model.update();
-            },
-            () => {
-                for (const child of children) {
-                    child.removed = false;
-                    child.subscribe(this._model);
-                }
-                parent.removed = true;
-
-                this._model.update();
-            },
-            window.cvat.player.frames.current,
-        );
-
-        // Update model, which triggers rendering.
-        this._model.update();
-
-        /**
-         * Sort 4 corners of a convex quadrilateral clockwise.
-         * The first corner is the top left.
-         *
-         * @param {Point[]} corners Corners to be sorted.
-         * @returns {Point[]} Sorted corners.
-         */
-        function sortCorners(corners) {
-            const centroid = {
-                x: corners.reduce((acc, corner) => acc + corner.x, 0) / 4,
-                y: corners.reduce((acc, corner) => acc + corner.y, 0) / 4,
-            };
-
-            return [
-                corners.find(corner => corner.x < centroid.x && corner.y < centroid.y),
-                corners.find(corner => corner.x > centroid.x && corner.y < centroid.y),
-                corners.find(corner => corner.x > centroid.x && corner.y > centroid.y),
-                corners.find(corner => corner.x < centroid.x && corner.y > centroid.y),
-            ];
-        }
-
-        /**
-         * Generate in-between points from p1 to p2.
-         *
-         * @param {Point} p1 Starting points.
-         * @param {Point} p2 Ending points.
-         * @param {number} numOfPoints Number of point to interpolate, excluding p1 and p2.
-         * @returns {Point[]} Generated points, including p1 and p2, so that its length is numOfPoints + 2.
-         */
-        function linearInterpolatePoints(p1, p2, numOfPoints) {
-            const x_step = (p2.x - p1.x - numOfPoints * SPACING) / (numOfPoints + 1);
-            const y_step = (p2.y - p1.y - numOfPoints * SPACING) / (numOfPoints + 1);
-
-            const points = new Array(numOfPoints + 2);
-            points[0] = p1;
-            for (let i = 1; i <= numOfPoints; i++) {
-                points[i] = {
-                    x: p1.x + i * (x_step + SPACING),
-                    y: p1.y + i * (y_step + SPACING),
-                };
-            }
-            points[numOfPoints + 1] = p2;
-
-            return points;
-        }
+    splitActiveShape(row, col) {
+        this._model.splitActiveShape(row, col);
     }
 
     /**
      * Remove currently active shape.
      *
      * @param {Object} e
-     * @param {?boolean} disableUndoRedo Disable undo/redo, as splitting
-     *                                   has its own undo/redo code.
+     * @param {?boolean} silent Disable undo/redo, as splitting
+     *                          has its own undo/redo code.
      * @returns {?ShapeModel} The removed shape, if disableUndoRedo is true.
      */
-    removeActiveShape(e, disableUndoRedo = false) {
+    removeActiveShape(e, silent = false) {
         if (window.cvat.mode === null) {
             this._model.selectShape(this._model.lastPosition, false);
             const { activeShape } = this._model;
             if (activeShape && (!activeShape.lock || e && e.shiftKey)) {
-                const removedItem = activeShape.remove(disableUndoRedo);
+                const removedItem = activeShape.remove(silent);
 
-                if (disableUndoRedo) {
+                if (silent) {
                     return removedItem;
                 }
             }
@@ -1636,10 +1509,6 @@ class ShapeCollectionView {
             }
         });
 
-        this._frameContent.node.addEventListener('mouseup', e => {
-            console.log(e);
-        }, true);
-
         this._frameContent.on('mousedown', (e) => {
             if (e.target === this._frameContent.node) {
                 this._controller.resetActive();
@@ -1707,15 +1576,15 @@ class ShapeCollectionView {
                 break;
             case 'split_row':
                 dialogSplitBox(true, false,
-                    (row, col) => this._controller.splitActiveBox(row, col));
+                    (row, col) => this._controller.splitActiveShape(row, col));
                 break;
             case 'split_column':
                 dialogSplitBox(false, true,
-                    (row, col) => this._controller.splitActiveBox(row, col));
+                    (row, col) => this._controller.splitActiveShape(row, col));
                 break;
             case 'split_grid':
                 dialogSplitBox(true, true,
-                    (row, col) => this._controller.splitActiveBox(row, col));
+                    (row, col) => this._controller.splitActiveShape(row, col));
                 break;
             }
         });
