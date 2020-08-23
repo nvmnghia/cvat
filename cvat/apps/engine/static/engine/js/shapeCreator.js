@@ -381,9 +381,13 @@ class ShapeCreatorView {
     _createCuboidEvent() {
         let sizeUI = null;
         const backFaceOffset = 20;
-        this._drawInstance = this._frameContent.rect().draw({ snapToGrid: 0.1 }).addClass('shapeCreation').attr({
-            'stroke-width': STROKE_WIDTH / this._scale,
-        })
+        this._drawInstance = this._frameContent
+            .rect()
+            .draw({ snapToGrid: 0.1 })
+            .addClass('shapeCreation')
+            .attr({
+                'stroke-width': STROKE_WIDTH / this._scale,
+            })
             .on('drawstop', (e) => {
                 if (this._cancel) {
                     return;

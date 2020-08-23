@@ -50,7 +50,7 @@ Removing a shape is as simple as setting the `removed` attribute of the shape. T
 When the user presses <kbd>Del</kbd>, the following chain is called:
 
 ```text
-ShapeCollectionController::removeActiveShape() -> ShapeModel::remove() -> ShapeCollectionModel::onShapeUpdate() -> BoxView::onShapeUpdate() ->
+ShapeCollectionController::removeActiveShape() -> ShapeModel::remove() -> ShapeCollectionModel::onShapeUpdate() -> BoxView::onShapeUpdate()
 ```
 
 After `add()`, `ShapeCollectionModel::update()` is called, notifying its subscribers (`ShapeCollectionView`, `AAModel`, `ShapeGrouperModel`) about state (shape collection) change.

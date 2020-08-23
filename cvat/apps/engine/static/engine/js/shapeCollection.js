@@ -75,7 +75,7 @@ class ShapeCollectionModel extends Listener {
         this._flush = false;
 
         /**
-         * Last position of the mouse, in canvas coordinate.
+         * Last position of the mouse, in #frameContent coordinate.
          *
          *  @type {SVGPoint}
          */
@@ -101,10 +101,32 @@ class ShapeCollectionModel extends Listener {
             '#33CC99', '#FFDB00', '#87FF2A', '#6EEB6E', '#FFC800', '#CC99BA', '#7A89B8',
             '#006A93', '#867200', '#E2B631', '#D9D6CF',
         ];
-
         this._colorIdx = 0;
+
+        /**
+         * A sublist of this._shapes, holding the shapes adjacent to the current one,
+         * i.e. shapes might be resized by the current shape.
+         * There're 3 states:
+         *   - null when this._resizeAdjacent is false.
+         *   - empty array when this._resizeAdjacent is true, but no adjacent is found.
+         *   - array containing the adjacent shapes.
+         *
+         * @type {ShapeModel[]}
+         */
+        this._adjacentToActive = null;
+
+        /**
+         * Enable or disable resizing adjacent models.
+         *
+         * @type {boolean}
+         */
+        this._resizeAdjacent = null;
+
         this._filter = new FilterModel(() => this.update());
         this._splitter = new ShapeSplitter();
+
+        /** @type {string} */
+        this._updateReason = null;
     }
 
     _nextGroupIdx() {
@@ -217,6 +239,19 @@ class ShapeCollectionModel extends Listener {
         }
 
         return shape;
+    }
+
+    /**
+     * @param {string} updateReason
+     */
+    notify(updateReason) {
+        const oldReason = this._updateReason;
+        this._updateReason = updateReason;
+        try {
+            Listener.prototype.notify.call(this);
+        } finally {
+            this._updateReason = oldReason;
+        }
     }
 
     cleanupClientObjects() {
@@ -636,7 +671,47 @@ class ShapeCollectionModel extends Listener {
             }
             this._activeShape = active;
             this._activeShape.active = true;
+
+            if (this.resizeAdjacent) {
+                this.filterAdjacent();
+                this.notify('activation');
+            }
+        } else if (!active) {
+            this.clearAdjacent();
+            this.notify('deactivation');
         }
+    }
+
+    /**
+     * Find shapes adjacent to the currently active one.
+     * For adjacent criteria, see isAdjacent() in shapes.js.
+     * This function populates this._adjacentToActive, so that subsequent resizing
+     * don't have to scan the whole list of views/shapes.
+     * This function only runs if:
+     *   - The shape is splittable: obviously don't care about non-splittable shapes.
+     *   - The shape is newly selected: resizing the same shape over and over don't
+     *     have to rerun this function.
+     */
+    filterAdjacent() {
+        this._adjacentToActive = [];
+        const { activeShape } = this;
+        if (!activeShape.splittable) {
+            return;
+        }
+
+        for (const model of this._shapes) {
+            if (!model.removed && model.frame === activeShape.frame && model !== activeShape    // Frame number check is also used in isAdjacent()
+                && model.splittable && model.isAdjacentTo(activeShape)) {     // It is used here to speed shit up.
+                this._adjacentToActive.push(model);
+            }
+        }
+    }
+
+    /**
+     * Clear the list of adjacent shapes.
+     */
+    clearAdjacent() {
+        this._adjacentToActive = null;
     }
 
     update() {
@@ -651,6 +726,8 @@ class ShapeCollectionModel extends Listener {
             this._activeShape.active = false;
             this._activeShape = null;
         }
+
+        this.clearAdjacent();
     }
 
     onPlayerUpdate(player) {
@@ -961,6 +1038,9 @@ class ShapeCollectionModel extends Listener {
         }
     }
 
+    /**
+     * Not to be confused with geometrical splitting feature of splitActiveShape.
+     */
     split() {
         if (this._activeShape) {
             if (!this._activeShape.lock && this._activeShape.type.split('_')[0] === 'interpolation') {
@@ -1048,6 +1128,28 @@ class ShapeCollectionModel extends Listener {
 
     get maxId() {
         return Math.max(-1, ...this._shapes.map(shape => shape.id));
+    }
+
+    get resizeAdjacent() {
+        return this._resizeAdjacent;
+    }
+
+    set resizeAdjacent(value) {
+        this._resizeAdjacent = value;
+
+        if (this._resizeAdjacent && this._activeShape) {
+            this.filterAdjacent();
+        } else {
+            this.clearAdjacent();
+        }
+    }
+
+    get updateReason() {
+        return this._updateReason;
+    }
+
+    get adjacentToActive() {
+        return this._adjacentToActive;
     }
 }
 
@@ -1353,6 +1455,15 @@ class ShapeCollectionController {
         this._model.showAllInterpolation = value;
     }
 
+    /**
+     * Enable or disable resize adjacent.
+     *
+     * @param {boolean} value
+     */
+    setResizeAdjacent(value) {
+        this._model.resizeAdjacent = value;
+    }
+
     colorsByGroup(groupId) {
         return this._model.colorsByGroup(groupId);
     }
@@ -1389,12 +1500,15 @@ class ShapeCollectionView {
         this._colorByGroupCheckbox = $('#colorByGroupCheckbox');
         this._filterView = new FilterView(this._controller.filterController);
         this._enabledProjectionCheckbox = $('#projectionLineEnable');
+        this._resizeAdjacentCheckbox = $('#resizeAdjacentCheckbox');
 
+        // The corresponding view and model have the same index in _currentViews and _currentModel.
         /** @type {ShapeView[]} */
         this._currentViews = [];
 
         /** @type {ShapeModel[]} */
         this._currentModels = [];
+
         this._frameMarker = null;
 
         this._activeShapeUI = null;
@@ -1414,15 +1528,15 @@ class ShapeCollectionView {
          *
          * @type {ShapeView[]}
          */
-        this._adjacentToLastResized = [];
+        this._adjacentToActive = null;
 
         /**
-         * A sublist of this.adjacentToLastResized, holding the shapes resized by moving a
+         * A sublist of this._adjacentToActive, holding the shapes resized by moving a
          * corner of the current shape, i.e. shapes actually resized by the current shape.
          *
          * @type {ShapeView[]}
          */
-        this._resizedByLastResized = [];
+        this._resizedByActive = null;
 
         this._showAllInterpolationBox.on('change', (e) => {
             this._controller.setShowAllInterpolation(e.target.checked);
@@ -1726,6 +1840,11 @@ class ShapeCollectionView {
             this._UIContent.addClass('hidden');
         });
 
+        this._resizeAdjacentCheckbox.on('change', (el) => {
+            this._controller.setResizeAdjacent(el.currentTarget.checked);
+        });
+        this._resizeAdjacentCheckbox.triggerHandler('change');
+
         /**
          * Ask user the number of row and column to split.
          *
@@ -1831,6 +1950,25 @@ class ShapeCollectionView {
      * @param {ShapeCollectionModel} collection Current ShapeCollectionModel.
      */
     onCollectionUpdate(collection) {
+        switch (collection.updateReason) {
+        case 'activation':
+            this.filterAdjacent(collection.adjacentToActive);
+            break;
+        case 'deactivation':
+            this.clearAdjacent();
+            break;
+        default:
+            this.render(collection);
+            break;
+        }
+    }
+
+    /**
+     * Render the collection. Only the changed models are rendered in this function.
+     *
+     * @param {ShapeCollectionModel} collection
+     */
+    render(collection) {
         // Save parents and detach elements from DOM
         // in order to increase performance in the buildShapeView function
         // (ol' trick of drawing on hidden element to avoid reflow).
@@ -1960,18 +2098,18 @@ class ShapeCollectionView {
         case 'resizestart':
             window.cvat.mode = 'resize';
 
-            this.prepareResizeAdjacent(view);
             this.startResizeAdjacent(view.resizeDetail.event);
             break;
         case 'resizing':
             this.updateResizeAdjacent(view.resizeDetail.event);
             break;
         case 'resizedone':
+            this.finishResizeAdjacent(view, view.resizeDetail.objWasResized);
+
             if (window.cvat.mode === 'resize') {
                 window.cvat.mode = null;
             }
 
-            this.finishResizeAdjacent(view.resizeDetail.objWasResized);
             break;
         case 'remove': {
             const idx = this._currentViews.indexOf(view);
@@ -1997,74 +2135,45 @@ class ShapeCollectionView {
     }
 
     /**
-     * Given a splittable ShapeView, create a list of shapes adjacent to it.
-     * For adjacent criteria, see isAdjacent() in shapes.js.
-     * This function populates this._adjacentToActive, so that subsequent resizing
-     * don't have to scan the whole list of views/shapes.
-     * This function only runs if:
-     *   - The shape is splittable: obviously don't care about non-splittable shapes.
-     *   - The shape is newly selected: resizing the same shape over and over don't
-     *     have to rerun this function.
+     * Given a list of ShapeModel adjacent to the active one, create a list of corresponding ShapeView.
+     * See ShapeCollectionModel::filterAdjacent()'s comment for more information,
+     * as this function receives its return value.
      *
-     * @param {ShapeView} shapeView A splittable ShapeView (currently BoxModel and PolygonModel only).
+     * @param {ShapeModel[]} adjacentModels List of ShapeModels adjacent to the active one.
      */
-    prepareResizeAdjacent(shapeView) {
-        if (!shapeView.controller().model().splittable) {
-            return;
-        }
-
-        if (this._lastResized === shapeView) {
-            // Already prepared.
-            // When another corner of the same shape is selected or left-clicked,
-            // a new resizestart event is fired, but the shape is not actually
-            // resized. Without checking, this function is called redundantly.
-            return;
-        }
-        this._lastResized = shapeView;
-
-        // Reset shape views' resize handlers.
-        // These initialization/reset code should be done whenever a new shape is selected,
-        // but it is delayed until now, when a corner is clicked.
-        if (this._adjacentToLastResized) {
-            for (const adjacent of this._adjacentToLastResized) {
-                adjacent._uis.shape
-                    .selectize(false, {
-                        deepSelect: true,
-                    })
-                    .resize(false);
+    filterAdjacent(adjacentModels) {
+        this._adjacentToActive = [];
+        for (const adjacentModel of adjacentModels) {
+            const idx = this._currentModels.indexOf(adjacentModel);
+            if (idx === -1) {
+                console.log('fuck');
             }
-        }
-
-        this._adjacentToLastResized = [];
-        this._resizedByLastResized = [];
-
-        // Filter adjacent shapes.
-        const shapeModel = shapeView.controller().model();
-        for (const view of this._currentViews) {
-            const model = view.controller().model();
-            if (model.frame === shapeModel.frame && view !== shapeView      // Frame number check is also used in isAdjacent()
-                && model.splittable && model.isAdjacentTo(shapeModel)) {    // It is used here to speed shit up.
-                this._adjacentToLastResized.push(view);
-            }
+            this._adjacentToActive.push(this._currentViews[idx]);
         }
     }
 
+    clearAdjacent() {
+        this._adjacentToActive = null;
+        this._resizedByActive = null;
+    }
+
     /**
-     * Filter adjacent shapes that is actually resized and initialize resize handler.
+     * Filter adjacent shapes that is actually resized and initialize their resize handlers.
      *
      * @param {CustomEvent} resizeEvent
      */
     startResizeAdjacent(resizeEvent) {
-        let mousePos = { x: resizeEvent.detail.x, y: resizeEvent.detail.y };
-        mousePos = window.cvat.translate.point.clientToCanvas(this._frameBackground[0], mousePos.x, mousePos.y);
+        this._resizedByActive = [];
+        const pointerEvent = resizeEvent.detail.event;
+        const pointerPos = window.cvat.translate.point.clientToCanvas(this._frameBackground[0], pointerEvent.clientX, pointerEvent.clientY);
 
-        for (const adjacent of this._adjacentToLastResized) {
+        for (const adjacent of this._adjacentToActive) {
             const model = adjacent.controller().model();
-            const indexOfAdjacentCorner = model.indexOfCornerAdjacentTo(mousePos);
+            const indexOfAdjacentCorner = model.indexOfCornerAdjacentTo(pointerPos);
 
             if (indexOfAdjacentCorner !== -1) {
                 // Populate this.resizedByLastResized
-                this._resizedByLastResized.push(adjacent);
+                this._resizedByActive.push(adjacent);
 
                 resizeEvent.detail.i = indexOfAdjacentCorner;
                 adjacent.startResizeByAdjacent(resizeEvent);
@@ -2078,21 +2187,25 @@ class ShapeCollectionView {
      * @param {MouseEvent|TouchEvent} mouseEvent Mouse event to feed to resize handler.
      */
     updateResizeAdjacent(mouseEvent) {
-        for (const resized of this._resizedByLastResized) {
+        for (const resized of this._resizedByActive) {
             resized.updateResizeByAdjacent(mouseEvent);
         }
     }
 
     /**
-     * Finish resizing: disable selectize & resize and save shape data.
-     * Check prepareResizeAdjacent() for the reason why objWasResized is needed.
+     * Finish resizing: disable selectize & resize and save shape data, including the active shape.
+     * Check filterAdjacent() for the reason why objWasResized is needed.
      *
+     * @param {ShapeView} active ShapeView of the active shape.
      * @param {boolean} objWasResized Whether object is actually resized.
      */
-    finishResizeAdjacent(objWasResized) {
-        for (const resized of this._resizedByLastResized) {
+    finishResizeAdjacent(active, objWasResized) {
+        active.finishResizeByAdjacent(objWasResized);
+        for (const resized of this._resizedByActive) {
             resized.finishResizeByAdjacent(objWasResized);
         }
+
+        this._resizedByActive = [];
     }
 
     // If ShapeGrouperModel was disabled, need to update shape appearance

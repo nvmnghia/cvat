@@ -875,6 +875,12 @@ class BoxModel extends ShapeModel {
         };
     }
 
+    /**
+     * Check if the area of a box is larger than AREA_THRESHOLD.
+     *
+     * @param {{xtl: number, ytl: number, xbr: number, ybr: number}} box Position of a box.
+     * @returns {boolean} Whether the area of the box is larger than AREA_THRESHOLD.
+     */
     _verifyArea(box) {
         return ((box.xbr - box.xtl) * (box.ybr - box.ytl) >= AREA_TRESHOLD);
     }
@@ -1974,7 +1980,7 @@ class PolygonModel extends PolyShapeModel {
 
 class ShapeController {
     /**
-     * @param {ShapeModel}
+     * @param {ShapeModel} shapeModel
      */
     constructor(shapeModel) {
         this._model = shapeModel;
@@ -2265,8 +2271,9 @@ class ShapeView extends Listener {
                         this._flags.resizing = false;
                         this.resizeDetail = { objWasResized };
                         if (objWasResized) {
-                            const frame = window.cvat.player.frames.current;
-                            this._controller.updatePosition(frame, this._buildPosition());
+                            // Move position updating code to ShapeCollectionModel.
+                            // const frame = window.cvat.player.frames.current;
+                            // this._controller.updatePosition(frame, this._buildPosition());
                             objWasResized = false;
                         }
 

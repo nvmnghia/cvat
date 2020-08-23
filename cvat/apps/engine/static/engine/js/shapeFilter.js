@@ -100,6 +100,9 @@ class FilterModel {
 }
 
 class FilterController {
+    /**
+     * @param {FilterModel} filterModel
+     */
     constructor(filterModel) {
         this._model = filterModel;
     }
@@ -179,67 +182,66 @@ class FilterController {
     }
 }
 
-
 class FilterView {
+    /**
+     * @param {FilterController} filterController
+     */
     constructor(filterController) {
         this._controller = filterController;
-        this._filterString = $("#filterInputString");
-        this._resetFilterButton = $("#resetFilterButton");
-        this._filterString.on("keypress keydown keyup", (e) => e.stopPropagation());
-        this._filterSubmitList = $("#filterSubmitList");
+        this._filterString = $('#filterInputString');
+        this._filterString.on('keypress keydown keyup', (e) => e.stopPropagation());
+        this._resetFilterButton = $('#resetFilterButton');
+        this._filterSubmitList = $('#filterSubmitList');
 
         let predefinedValues = null;
         try {
-            predefinedValues = JSON.parse(localStorage.getItem("filterValues")) || [];
-        }
-        catch (ignore) {
+            predefinedValues = JSON.parse(localStorage.getItem('filterValues')) || [];
+        } catch (ignore) {
             predefinedValues = [];
         }
 
-        let initSubmitList = () => {
+        const initSubmitList = () => {
             this._filterSubmitList.empty();
             for (let value of predefinedValues) {
                 value = value.replace(/'/g, '"');
                 this._filterSubmitList.append(`<option value='${value}'> ${value} </option>`);
             }
-        }
+        };
         initSubmitList();
 
-        this._filterString.on("change", (e) => {
-            let value = $.trim(e.target.value).replace(/'/g, '"');
+        this._filterString.on('change', (e) => {
+            const value = $.trim(e.target.value).replace(/'/g, '"');
             if (this._controller.updateFilter(value, false)) {
-                this._filterString.css("color", "green");
+                this._filterString.css('color', 'green');
                 if (!predefinedValues.includes(value)) {
                     predefinedValues = (predefinedValues.concat([value])).slice(-10);
-                    localStorage.setItem("filterValues", JSON.stringify(predefinedValues));
+                    localStorage.setItem('filterValues', JSON.stringify(predefinedValues));
                     initSubmitList();
                 }
-            }
-            else {
-                this._filterString.css("color", "red");
-                this._controller.updateFilter("", false);
+            } else {
+                this._filterString.css('color', 'red');
+                this._controller.updateFilter('', false);
             }
         });
 
-        let shortkeys = window.cvat.config.shortkeys;
-        this._filterString.attr("title", `
-            ${shortkeys["prev_filter_frame"].view_value} - ${shortkeys["prev_filter_frame"].description}` + `\n` +
-            `${shortkeys["next_filter_frame"].view_value} - ${shortkeys["next_filter_frame"].description}`);
+        const { shortkeys } = window.cvat.config;
+        this._filterString.attr('title', `
+            ${shortkeys.prev_filter_frame.view_value} - ${shortkeys.prev_filter_frame.description}` + '\n'
+            + `${shortkeys.next_filter_frame.view_value} - ${shortkeys.next_filter_frame.description}`);
 
-        this._resetFilterButton.on("click", () => {
-            this._filterString.prop("value", "");
-            this._controller.updateFilter("", false);
+        this._resetFilterButton.on('click', () => {
+            this._filterString.prop('value', '');
+            this._controller.updateFilter('', false);
         });
 
-        let initialFilter = window.cvat.search.get("filter");
+        const initialFilter = window.cvat.search.get('filter');
         if (initialFilter) {
-            this._filterString.prop("value", initialFilter);
+            this._filterString.prop('value', initialFilter);
             if (this._controller.updateFilter(initialFilter, true)) {
-                this._filterString.css("color", "green");
-            }
-            else {
-                this._filterString.prop("value", "");
-                this._filterString.css("color", "red");
+                this._filterString.css('color', 'green');
+            } else {
+                this._filterString.prop('value', '');
+                this._filterString.css('color', 'red');
             }
         }
     }

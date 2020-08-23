@@ -21,11 +21,13 @@
  *    server shapes use this coordinate system.
  *   - Canvas: for drawing data. Even worse, but obviously, each canvas has its own
  *    coordinate system:
- *     + #frameContent: Same origin, pixel size,... as Image, but allows for negative
- *       coordinate. The element itself holds the image.
- *     + #playerFrame: 30000-ish width and height, used to actually draw UI in
- *       _drawShapeUI(). Conversion uses _playerOffset.
- *   - Viewport (also refer to as "client"): for processing mouse event.
+ *     + #frameBackground: Same origin, pixel size,... as Image, but allows for
+ *       negative coordinate. The element itself holds the image.
+ *     + #frameContent, #playerFrame: 30000-ish width and height, used to actually
+ *       draw UI in _drawShapeUI(). Conversion uses _playerOffset.
+ *   - Viewport (also refer to as "client"): for processing mouse event. Notably,
+ *     there're also page coordinate, and screen coordinate. These 2 coordinates
+ *     is not used in this project, but can (did) cause serious confusion.
  */
 class CoordinateTranslator {
     constructor() {

@@ -53,6 +53,22 @@
             }
         },
         {
+            "name": "server: firefox",
+            "type": "firefox",
+            "request": "launch",
+            "url": "http://localhost:7000/",
+            "pathMapping": [
+                {
+                    "url": "/static/engine/",
+                    "path": "${workspaceFolder}/cvat/apps/engine/static/engine/",
+                },
+                {
+                    "url": "/static/dashboard/",
+                    "path": "${workspaceFolder}/cvat/apps/dashboard/static/dashboard/",
+                }
+            ]
+        },
+        {
             "name": "server: RQ - default",
             "type": "python",
             "request": "launch",
@@ -190,6 +206,7 @@
             "name": "server: debug",
             "configurations": [
                 "server: chrome",
+                // "server: firefox",
                 "server: django",
                 "server: RQ - default",
                 "server: RQ - low",
