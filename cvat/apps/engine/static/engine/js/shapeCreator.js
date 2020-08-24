@@ -42,11 +42,10 @@ class ShapeCreatorModel extends Listener {
     /**
      * Finish drawing and add shape.
      *
-     * @param {*} result The shape to be added.
-     * @param {?boolean} disableUndoRedo Disable undo/redo, as splitting
-     *                                   has its own undo/redo code.
+     * @param {Object} result The shape to be added.
+     * @param {boolean} [silent=false] Disable undo/redo, as custom/mixed operation has its own undo/redo code.
      */
-    finish(result, disableUndoRedo = false) {
+    finish(result, silent = false) {
         const data = {};
         const frame = window.cvat.player.frames.current;
 
@@ -72,36 +71,11 @@ class ShapeCreatorModel extends Listener {
             && ['box', 'points', 'box_by_4_points'].includes(this._defaultType)) {
             data.shapes = [];
             data.shapes.push(Object.assign({}, result, data));
-            this._shapeCollection.add(data, `interpolation_${this._defaultType}`);
+            this._shapeCollection.add(data, `interpolation_${this._defaultType}`, silent);
         } else {
             Object.assign(data, result);
-            this._shapeCollection.add(data, `annotation_${this._defaultType}`);
+            this._shapeCollection.add(data, `annotation_${this._defaultType}`, silent);
         }
-
-        const model = this._shapeCollection.shapes.slice(-1)[0];
-
-        if (!disableUndoRedo) {
-            // Undo/redo code
-            window.cvat.addAction(
-                // name
-                'Draw Object',
-                // undo
-                () => {
-                    model.removed = true;
-                    model.unsubscribe(this._shapeCollection);
-                },
-                // redo
-                () => {
-                    model.subscribe(this._shapeCollection);
-                    model.removed = false;
-                },
-                // frame
-                window.cvat.player.frames.current,
-            );
-            // End of undo/redo code
-        }
-
-        this._shapeCollection.update();
     }
 
     /**
@@ -220,9 +194,8 @@ class ShapeCreatorController {
     /**
      * Finish drawing and add shape.
      *
-     * @param {*} result The shape to be added.
-     * @param {?boolean} disableUndoRedo Disable undo/redo, as splitting
-     *                                   has its own undo/redo code.
+     * @param {Object} result The shape to be added.
+     * @param {boolean} [silent=false] Disable undo/redo, as custom/mixed operation has its own undo/redo code.
      */
     finish(result, disableUndoRedo) {
         // There're cases that finish() is called

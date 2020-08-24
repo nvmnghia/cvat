@@ -625,8 +625,8 @@ class ShapeModel extends Listener {
      * In that case, the removed model (a BoxModel) is also returned,
      * so that undo and redo is possible.
      *
-     * @param {?boolean} silent Disable undo/redo, as custom/mixed operation has its own undo/redo code.
-     * @returns {?BoxModel} Returns the deleted model if disableUndoRedo is true.
+     * @param {boolean} [silent=false] Disable undo/redo, as custom/mixed operation has its own undo/redo code.
+     * @returns {Function[]} Undo/redo functions, null if silent is false.
      */
     remove(silent = false) {
         Logger.addEvent(Logger.EventType.deleteObject, { count: 1 });
@@ -634,22 +634,22 @@ class ShapeModel extends Listener {
         // Also notify subscribers.
         this.removed = true;
 
+        const undoHandler = () => {
+            this.removed = false;
+        };
+        const redoHandler = () => {
+            this.removed = true;
+        };
+
         if (!silent) {
             // Undo/redo code
-            window.cvat.addAction(
-                'Remove Object',
-                () => {
-                    this.removed = false;
-                },
-                () => {
-                    this.removed = true;
-                },
-                window.cvat.player.frames.current,
-            );
+            window.cvat.addAction('Remove Object', undoHandler, redoHandler, window.cvat.player.frames.current);
             // End of undo/redo code
-        } else {
-            return this;
+
+            return null;
         }
+
+        return [undoHandler, redoHandler];
     }
 
     /**
@@ -793,9 +793,10 @@ class ShapeModel extends Listener {
     /**
      * Check if the shape can be split geometrically (not to be confused with split interpolation feature).
      * The shape is splittable only if it satisfies all three requirements:
-     *   - It is an annotated shape
-     *   - It is a convex quadrilateral
+     *   - It is an annotated shape.
+     *   - It is not locked.
      *   - It is either a BoxModel or PolygonModel.
+     * There's an implied convex requirements, but too complex to fit here.
      *
      * @returns {boolean} Whether the shape is geometrically splittable.
      */
@@ -888,9 +889,9 @@ class BoxModel extends ShapeModel {
     /**
      * @param {number} frame
      * @param {Object} position
-     * @param {boolean} silent Disable undo/redo, as custom/mixed operation has its own undo/redo code
+     * @param {boolean} [silent=false] Disable undo/redo, as custom/mixed operation has its own undo/redo code.
      */
-    updatePosition(frame, position, silent) {
+    updatePosition(frame, position, silent = false) {
         const pos = {
             xtl: Math.clamp(position.xtl, 0, window.cvat.player.geometry.frameWidth),
             ytl: Math.clamp(position.ytl, 0, window.cvat.player.geometry.frameHeight),
@@ -1044,7 +1045,7 @@ class BoxModel extends ShapeModel {
      * @inheritdoc
      */
     get splittable() {
-        return this.type.split('_')[0] === 'annotation';
+        return this.type.split('_')[0] === 'annotation' && !this.lock;
     }
 
     /**
@@ -1290,10 +1291,10 @@ class PolyShapeModel extends ShapeModel {
     /**
      * @param {number} frame
      * @param {Object} position
-     * @param {boolean} silent Disable undo/redo, as custom/mixed operation has its own undo/redo code
+     * @param {boolean} [silent=false] Disable undo/redo, as custom/mixed operation has its own undo/redo code.
      * @returns {Function[]} Undo/redo functions, null if silent is false.
      */
-    updatePosition(frame, position, silent) {
+    updatePosition(frame, position, silent = false) {
         const box = {
             xtl: Number.MAX_SAFE_INTEGER,
             ytl: Number.MAX_SAFE_INTEGER,
@@ -1821,7 +1822,7 @@ class PolygonModel extends PolyShapeModel {
      * @inheritdoc
      */
     get splittable() {
-        return this.type.split('_')[0] === 'annotation'
+        return this.type.split('_')[0] === 'annotation' && !this.lock
         && (this._positions[this.frame].points.match(/,/g) || []).length === 4;    // 4 corners.
         // && isConvex();    // TODO: convexity check.
     }
@@ -1991,7 +1992,7 @@ class ShapeController {
     /**
      * @param {number} frame
      * @param {Object} position
-     * @param {boolean} silent Disable undo/redo, as custom/mixed operation has its own undo/redo code
+     * @param {boolean} [silent=false] Disable undo/redo, as custom/mixed operation has its own undo/redo code.
      * @returns {Function[]} Undo/redo functions, null if silent is false.
      */
     updatePosition(frame, position, silent = false) {

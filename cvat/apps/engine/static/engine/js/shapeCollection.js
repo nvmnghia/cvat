@@ -346,7 +346,7 @@ class ShapeCollectionModel extends Listener {
                 this.add(imported, `interpolation_${imported.shapes[0].type}`);
             } else {
                 _convertShape(imported);
-                this.add(imported, `annotation_${imported.type}`);
+                this.add(imported, `annotation_${imported.type}`, true);    // Avoid undo/redo by setting silent to true.
             }
         }
 
@@ -490,9 +490,10 @@ class ShapeCollectionModel extends Listener {
      *                         {annotation_mode}_{shape_type}
      *                       add_mode could be interpolation or annotation
      *                       shape_type could be box, polygon,...
-     * @returns {ShapeModel} The added shape model.
+     * @param {boolean} [silent=false] Disable undo/redo, as custom/mixed operation has its own undo/redo code.
+     * @returns {Function[]} Undo/redo functions, null if silent is false.
      */
-    add(data, type) {
+    add(data, type, silent = false) {
         this._idx += 1;
         const id = this._idx;
         const model = buildShapeModel(data, type, id, this.nextColor());
@@ -513,7 +514,30 @@ class ShapeCollectionModel extends Listener {
             this._groups[groupIdx] = this._groups[groupIdx] || [];
             this._groups[groupIdx].push(model);
         }
-        return model;
+
+        // Move from ShapeCreatorModel::finish(), to make silent possible.
+        // The reason that the undo/redo code was in ShapeCreatorModel::finish() is that
+        // add() can be called in places other than ShapeCreatorModel::finish(), e.g. in
+        // ShapeCollectionModel::import(), which is the initial import and which does not
+        // want to undo/redo.
+        const undoHandler = () => {
+            model.removed = true;
+            model.unsubscribe(this);
+        };
+        const redoHandler = () => {
+            model.subscribe(this);
+            model.removed = false;
+        };
+
+        if (!silent) {
+            // Undo/redo code
+            window.cvat.addAction('Draw Object', undoHandler, redoHandler, window.cvat.player.frames.current);
+            // End of undo/redo code
+        }
+
+        this.update();
+
+        return silent ? [undoHandler, redoHandler] : null;
     }
 
     /**
@@ -523,33 +547,33 @@ class ShapeCollectionModel extends Listener {
      *
      * @param {number} row Number of row. 1 if don't split row.
      * @param {number} col Number of column. 1 if don't split column.
+     * @returns {string} Error messages, null if there is none.
      */
     splitActiveShape(row, col) {
         if (row <= 0 || col <= 0 || !Number.isInteger(row) || !Number.isInteger(col)) {
-            return;
+            return 'Invalid number of column and row';
         }
         if (row === 1 && col === 1) {
-            return;
+            return null;
         }
 
         // TODO: check window.cvat.mode.
-        // TODO: move showMessage() out of Model. Ideas: see how ShapeCollectionModel pushes shits to ShapeCollectionView.
         this.selectShape(this.lastPosition, false);
         if (!this.activeShape.splittable) {
-            showMessage('This type of object does not support splitting.');
-            return;
+            return 'This type of object does not support splitting.';
         }
 
         const getChildPosition = this.activeShape.getChildPositionFunc(row, col);
         if (!getChildPosition) {
-            showMessage('This type of object does not support splitting.');
+            return 'This type of object does not support splitting.';
         }
 
-        // Delete the box
-        const parent = this.activeShape.remove(true);
+        // Delete the active shape, aka parent.
+        const parent = this.activeShape;
+        const parentHandlerPair = this.activeShape.remove(true);
 
         // Add child boxes.
-        const children = [];
+        const childrenHandlerPairs = [];
         const basePosition = {
             attributes: [],
             frame: parent.frame,
@@ -561,38 +585,34 @@ class ShapeCollectionModel extends Listener {
 
         for (let i = 0; i < row; ++i) {
             for (let j = 0; j < col; ++j) {
-                const child = this.add(
+                const childHandlerPair = this.add(
                     Object.assign({}, basePosition, getChildPosition(i, j)),
                     parent.type,
+                    true,
                 );
-                children.push(child);
+                childrenHandlerPairs.push(childHandlerPair);
             }
         }
 
         // Undo/redo
-        // Undo/redo add: ShapeCreatorModel::finish().
+        // Undo/redo create: ShapeCreatorModel::finish().
         // Undo/redo remove: ShapeModel::remove().
         window.cvat.addAction(
             `Split ${parent.type.split('_')[1]}`,
             () => {
-                // Undo create
-                for (const child of children) {
-                    child.removed = true;
-                    child.unsubscribe(this);
+                for (const childHandlerPair of childrenHandlerPairs) {
+                    childHandlerPair[0]();
                 }
-
-                // Undo remove
-                parent.removed = false;
+                parentHandlerPair[0]();
 
                 // TODO: check if update() is needed in undo/redo.
                 // this.update();
             },
             () => {
-                for (const child of children) {
-                    child.removed = false;
-                    child.subscribe(this);
+                parentHandlerPair[1]();
+                for (const childHandlerPair of childrenHandlerPairs) {
+                    childHandlerPair[1]();
                 }
-                parent.removed = true;
 
                 this.update();
             },
@@ -601,6 +621,8 @@ class ShapeCollectionModel extends Listener {
 
         // Trigger rendering.
         this.update();
+
+        return null;
     }
 
     /**
@@ -1373,9 +1395,10 @@ class ShapeCollectionController {
      *
      * @param {number} row Number of row. 1 if don't split row.
      * @param {number} col Number of column. 1 if don't split column.
+     * @returns {string} Error messages, null if there is none.
      */
     splitActiveShape(row, col) {
-        this._model.splitActiveShape(row, col);
+        return this._model.splitActiveShape(row, col);
     }
 
     /**
@@ -1690,15 +1713,30 @@ class ShapeCollectionView {
                 break;
             case 'split_row':
                 dialogSplitBox(true, false,
-                    (row, col) => this._controller.splitActiveShape(row, col));
+                    (row, col) => {
+                        const errorMsg = this._controller.splitActiveShape(row, col);
+                        if (errorMsg) {
+                            showMessage(errorMsg);
+                        }
+                    });
                 break;
             case 'split_column':
                 dialogSplitBox(false, true,
-                    (row, col) => this._controller.splitActiveShape(row, col));
+                    (row, col) => {
+                        const errorMsg = this._controller.splitActiveShape(row, col);
+                        if (errorMsg) {
+                            showMessage(errorMsg);
+                        }
+                    });
                 break;
             case 'split_grid':
                 dialogSplitBox(true, true,
-                    (row, col) => this._controller.splitActiveShape(row, col));
+                    (row, col) => {
+                        const errorMsg = this._controller.splitActiveShape(row, col);
+                        if (errorMsg) {
+                            showMessage(errorMsg);
+                        }
+                    });
                 break;
             }
         });
