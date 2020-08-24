@@ -1291,6 +1291,7 @@ class PolyShapeModel extends ShapeModel {
      * @param {number} frame
      * @param {Object} position
      * @param {boolean} silent Disable undo/redo, as custom/mixed operation has its own undo/redo code
+     * @returns {Function[]} Undo/redo functions, null if silent is false.
      */
     updatePosition(frame, position, silent) {
         const box = {
@@ -1322,25 +1323,23 @@ class PolyShapeModel extends ShapeModel {
             z_order: position.z_order,
         };
 
+        const oldPos = Object.assign({}, this._positions[frame]);
+        const undoHandler = () => {
+            if (!Object.keys(oldPos).length) {
+                delete this._positions[frame];
+                this.notify('position');
+            } else {
+                this.updatePosition(frame, oldPos, false);
+            }
+        };
+        const redoHandler = () => {
+            this.updatePosition(frame, pos, false);
+        };
+
         if (this._verifyArea(box)) {
             if (!silent) {
                 // Undo/redo code
-                const oldPos = Object.assign({}, this._positions[frame]);
-                window.cvat.addAction(
-                    'Change Position',
-                    () => {
-                        if (!Object.keys(oldPos).length) {
-                            delete this._positions[frame];
-                            this.notify('position');
-                        } else {
-                            this.updatePosition(frame, oldPos, false);
-                        }
-                    },
-                    () => {
-                        this.updatePosition(frame, pos, false);
-                    },
-                    frame,
-                );
+                window.cvat.addAction('Change Position', undoHandler, redoHandler, frame);
                 // End of undo/redo code
             }
 
@@ -1356,7 +1355,10 @@ class PolyShapeModel extends ShapeModel {
 
         if (!silent) {
             this.notify('position');
+            return null;
         }
+
+        return [undoHandler, redoHandler];
     }
 
     /**
@@ -1989,9 +1991,11 @@ class ShapeController {
     /**
      * @param {number} frame
      * @param {Object} position
+     * @param {boolean} silent Disable undo/redo, as custom/mixed operation has its own undo/redo code
+     * @returns {Function[]} Undo/redo functions, null if silent is false.
      */
-    updatePosition(frame, position) {
-        this._model.updatePosition(frame, position);
+    updatePosition(frame, position, silent = false) {
+        return this._model.updatePosition(frame, position, silent);
     }
 
     updateAttribute(frame, attrId, value) {
@@ -3857,6 +3861,7 @@ class PolygonView extends PolyShapeView {
      * Only used in ShapeCollectionView::finishResizeAdjacent().
      *
      * @param {boolean} objWasResized Whether object is actually resized.
+     * @returns {Function[]} Undo & redo handlers, null if objWasResized is false.
      */
     finishResizeByAdjacent(objWasResized) {
         this._uis.shape
@@ -3868,8 +3873,10 @@ class PolygonView extends PolyShapeView {
         if (objWasResized) {
             // Copypasta from resizedone callback in _makeEditable().
             const frame = window.cvat.player.frames.current;
-            this.controller().updatePosition(frame, this._buildPosition());
+            return this.controller().updatePosition(frame, this._buildPosition(), true);
         }
+
+        return null;
     }
 }
 

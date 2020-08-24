@@ -2200,9 +2200,20 @@ class ShapeCollectionView {
      * @param {boolean} objWasResized Whether object is actually resized.
      */
     finishResizeAdjacent(active, objWasResized) {
-        active.finishResizeByAdjacent(objWasResized);
+        const handlerPairs = [];
+
+        handlerPairs.push(active.finishResizeByAdjacent(objWasResized));
         for (const resized of this._resizedByActive) {
-            resized.finishResizeByAdjacent(objWasResized);
+            handlerPairs.push(resized.finishResizeByAdjacent(objWasResized));
+        }
+
+        if (objWasResized) {
+            window.cvat.addAction(
+                'Resize shapes',
+                () => handlerPairs.forEach(handlerPair => handlerPair[0]()),
+                () => handlerPairs.forEach(handlerPair => handlerPair[1]()),
+                window.cvat.player.frames.current,
+            );
         }
 
         this._resizedByActive = [];
