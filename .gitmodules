@@ -1,3 +1,4 @@
-[submodule "CRAFT-pytorch"]
-	path = CRAFT-pytorch
-	url = git@github.com:clovaai/CRAFT-pytorch.git
+
+[submodule "serverless/pytorch/clovaai/craft/CRAFT-pytorch"]
+	path = serverless/pytorch/clovaai/craft/CRAFT-pytorch
+	url = https://github.com/clovaai/CRAFT-pytorch

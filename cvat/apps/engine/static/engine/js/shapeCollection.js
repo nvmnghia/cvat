@@ -517,9 +517,7 @@ class ShapeCollectionModel extends Listener {
 
         // Move from ShapeCreatorModel::finish(), to make silent possible.
         // The reason that the undo/redo code was in ShapeCreatorModel::finish() is that
-        // add() can be called in places other than ShapeCreatorModel::finish(), e.g. in
-        // ShapeCollectionModel::import(), which is the initial import and which does not
-        // want to undo/redo.
+        // add() can be called without undo/redo, e.g. in ShapeCollectionModel::import().
         const undoHandler = () => {
             model.removed = true;
             model.unsubscribe(this);
@@ -1547,7 +1545,7 @@ class ShapeCollectionView {
 
         /**
          * A sublist of this._currentViews, holding the shapes adjacent to the current one,
-         * i.e. shapes might be resized by the current shape.
+         * i.e. shapes MIGHT be resized by the active shape.
          *
          * @type {ShapeView[]}
          */
@@ -1555,7 +1553,7 @@ class ShapeCollectionView {
 
         /**
          * A sublist of this._adjacentToActive, holding the shapes resized by moving a
-         * corner of the current shape, i.e. shapes actually resized by the current shape.
+         * corner of the current shape, i.e. shapes ACTUALLY resized by the active shape.
          *
          * @type {ShapeView[]}
          */
@@ -2180,6 +2178,11 @@ class ShapeCollectionView {
      * @param {ShapeModel[]} adjacentModels List of ShapeModels adjacent to the active one.
      */
     filterAdjacent(adjacentModels) {
+        if (adjacentModels === null) {
+            this._adjacentToActive = null;
+            return;
+        }
+
         this._adjacentToActive = [];
         for (const adjacentModel of adjacentModels) {
             const idx = this._currentModels.indexOf(adjacentModel);
@@ -2190,6 +2193,9 @@ class ShapeCollectionView {
         }
     }
 
+    /**
+     * Reset list of adjacent shapes in ShapeCollectionView.
+     */
     clearAdjacent() {
         this._adjacentToActive = null;
         this._resizedByActive = null;
@@ -2235,7 +2241,7 @@ class ShapeCollectionView {
      * Check filterAdjacent() for the reason why objWasResized is needed.
      *
      * @param {ShapeView} active ShapeView of the active shape.
-     * @param {boolean} objWasResized Whether object is actually resized.
+     * @param {boolean} objWasResized Whether the shape is actually resized or not.
      */
     finishResizeAdjacent(active, objWasResized) {
         const handlerPairs = [];

@@ -3861,7 +3861,7 @@ class PolygonView extends PolyShapeView {
      * Finish resizing: disable selectize & resize and save shape data.
      * Only used in ShapeCollectionView::finishResizeAdjacent().
      *
-     * @param {boolean} objWasResized Whether object is actually resized.
+     * @param {boolean} objWasResized Whether the shape is actually resized or not.
      * @returns {Function[]} Undo & redo handlers, null if objWasResized is false.
      */
     finishResizeByAdjacent(objWasResized) {
