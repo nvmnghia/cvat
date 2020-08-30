@@ -3,10 +3,13 @@
 # SPDX-License-Identifier: MIT
 
 import os
+
 import cv2
 import numpy as np
 from skimage.measure import approximate_polygon, find_contours
+
 from model_loader import ModelLoader
+
 
 class ModelHandler:
     def __init__(self, labels):

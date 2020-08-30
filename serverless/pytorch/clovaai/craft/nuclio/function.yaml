@@ -1,0 +1,49 @@
+metadata:
+  name: clovaai.craft
+  namespace: cvat
+  annotations:
+    name: CRAFT
+    type: detector
+    framework: pytorch
+    spec: |
+      [
+        { "id": 0, "name": "word" }
+      ]
+
+spec:
+  description: Official implementation of Character Region Awareness for Text Detection (CRAFT)
+  runtime: "python"
+  handler: main:handler
+  env:
+    - name: PYTHONPATH    # Hyphen for field of the same item. JSON equiv: { "name": "", "value": "" }.
+      value: /opt/nuclio/CRAFT-pytorch
+
+  build:
+    # image: cvat/clovaai.craft    # TODO: play with alpine image.
+
+    directives:
+      preCopy:
+        - kind: WORKDIR
+          value: /opt/nuclio
+        - kind: RUN
+          value: git clone https://github.com/clovaai/CRAFT-pytorch
+        - kind: WORKDIR
+          value: /opt/nuclio/CRAFT-pytorch
+        - kind: RUN
+          value: sed -i 's/==/>=/g' requirements.txt && pip3 install -r requirements.txt
+        - kind: RUN
+          value: apt-get update && apt-get install -y libgl1-mesa-glx
+        - kind: RUN
+          value: >    # Newline is replaced with space, so NO backslash.
+            mkdir model &&
+            wget --no-check-certificate 'https://drive.google.com/u/0/uc?id=1Jk4eGD7crsqCCg9C9VjCLkMN3ze8kutZ&export=download' -O model/craft_mlt_25k.pth &&
+            wget --no-check-certificate 'https://drive.google.com/u/0/uc?id=1XSaFwBkOaFOdtk4Ane3DFyJGPRw6v5bO&export=download' -O model/craft_refiner_CTW1500.pth
+
+  # Same as other functions.
+  triggers:
+    myHttpTrigger:
+      maxWorkers: 2
+      kind: "http"
+      workerAvailabilityTimeoutMilliseconds: 10000
+      attributes:
+        maxRequestBodySize: 33554432    # 32MB
