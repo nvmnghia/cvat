@@ -20,7 +20,16 @@ import file_utils
 
 
 class ModelHandler:
-    def __init__(self):
+    def __init__(self, label: str = 'word'):
+        """
+        Initialize the model & default arguments.
+
+        Parameters
+        ----------
+        label: str
+            Name of the label. Default to 'word'.
+        """
+
         super().__init__()
 
         self.args = {
@@ -39,6 +48,7 @@ class ModelHandler:
         self.args = SimpleNamespace(**self.args)
 
         self.net = CRAFT()     # initialize
+        self.label = label
 
         print(f'Loading weights from checkpoint ({self.args.trained_model})')
         if self.args.cuda:
@@ -71,18 +81,22 @@ class ModelHandler:
             self.args.poly = True
 
 
-    def infer(self, buffer: str):
+    def infer(self, buffer: str) -> list:
         """
         Process image.
 
         Parameters
         ----------
         buffer : str
-            Image encoded in base64 UTF-8 string.
+            Image encoded in a base64 UTF-8 string.
+
+        Returns
+        -------
+        list
+            List of result for CVAT. Each is an dictionary having 'label' and 'points' (array of number, not serialized).
         """
 
         t = time.time()
-
         image = imgproc.loadImage(buffer)    # loadImage() expects file path, however buffer is also accepted.
         bboxes, polys = self.test_net(self.net, image,
             self.args.text_threshold, self.args.link_threshold, self.args.low_text, self.args.cuda, self.args.poly,
@@ -92,16 +106,18 @@ class ModelHandler:
         results = []
         for poly in polys:
             results.append({
-                'label': 'word',
+                'label': self.label,
                 'points': poly.ravel().tolist(),
                 'type': 'polygon'
             })
         return results
 
 
-    def test_net(self, net, image, text_threshold, link_threshold, low_text, cuda, poly, refine_net=None):
+    def test_net(self, net: CRAFT, image: np.ndarray, text_threshold: float, link_threshold: float,
+        low_text: float, cuda: bool, poly: bool, refine_net=None):
         """
         Copypasta the original function to avoid running argparse code while importing.
+        Heatmap code is removed.
         """
 
         t0 = time.time()
@@ -150,7 +166,11 @@ class ModelHandler:
 
 
     @classmethod
-    def copyStateDict(cls, state_dict):
+    def copyStateDict(cls, state_dict: dict) -> dict:
+        """
+        Copy a state dict.
+        """
+
         if list(state_dict.keys())[0].startswith('module'):
             start_idx = 1
         else:

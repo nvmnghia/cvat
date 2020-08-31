@@ -5,7 +5,7 @@ metadata:
     name: CRAFT
     type: detector
     framework: pytorch
-    spec: |
+    spec: |    # In this case, only the name of the first label is used.
       [
         { "id": 0, "name": "word" }
       ]
@@ -19,7 +19,7 @@ spec:
       value: /opt/nuclio/CRAFT-pytorch
 
   build:
-    # image: cvat/clovaai.craft    # TODO: play with alpine image.
+    image: cvat/clovaai.craft
 
     directives:
       preCopy:
@@ -30,7 +30,7 @@ spec:
         - kind: WORKDIR
           value: /opt/nuclio/CRAFT-pytorch
         - kind: RUN
-          value: sed -i 's/==/>=/g' requirements.txt && pip3 install -r requirements.txt
+          value: sed -i 's/==/>=/g' requirements.txt && pip3 install -r requirements.txt && pip3 install nuclio-sdk PyYAML
         - kind: RUN
           value: apt-get update && apt-get install -y libgl1-mesa-glx
         - kind: RUN
@@ -46,4 +46,4 @@ spec:
       kind: "http"
       workerAvailabilityTimeoutMilliseconds: 10000
       attributes:
-        maxRequestBodySize: 33554432    # 32MB
+        maxRequestBodySize: 134217728    # 128MB
